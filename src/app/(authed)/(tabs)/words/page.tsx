@@ -1,10 +1,10 @@
-import { getDeck } from "@/lib/data";
+"use client";
+
+import { useAppData } from "@/lib/store/provider";
 import { WordsClient } from "./WordsClient";
 
-export const dynamic = "force-dynamic";
-
-export default async function MyWordsPage() {
-  const deck = await getDeck();
+export default function MyWordsPage() {
+  const { deck } = useAppData();
   return (
     <WordsClient
       words={deck.map((w) => ({

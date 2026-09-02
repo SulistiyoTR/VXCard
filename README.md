@@ -30,14 +30,18 @@ src/lib/            pure logic (no framework) + tested
   session.ts        buildSession() 80/20 composition             (SPEC 3.3, 3.6, 3.7)
   quiz.ts           questions, distractors, fuzzy match, hints   (SPEC 2.2–2.6)
   streak.ts         streak / best-streak
+  statsCalc.ts      Stats / Calendar aggregation (client-side)
   generate.ts       dictionary + 2× LLM pipeline                 (SPEC 1.1)
-  data.ts           Supabase reads (server-only)
-  actions.ts        Server Actions (writes)
-  stats.ts          Stats / Calendar aggregation
+  store/            offline-first: IndexedDB source of truth + LWW sync (SPEC 6.4)
+  data.ts           Supabase reads — first-paint snapshot + sync endpoint
+  actions.ts        Server Actions — LLM-only writes (regenerate / refresh)
 src/app/
-  (app)/            tab-bar screens: home, add, words, stats
-  session/          fullscreen quiz flow (setup → quiz → complete)
+  (authed)/         data provider; every screen reads useAppData()
+    (tabs)/         home, add, words, stats, calendar
+    session/        fullscreen quiz flow (setup → quiz → complete)
   api/generate/     the only place the Anthropic key is used
+  api/sync/         push/pull the client outbox
+  api/cron/notify/  daily Web Push reminder (Vercel Cron)
 supabase/migrations/  SQL — run these by hand (SETUP.md)
 ```
 

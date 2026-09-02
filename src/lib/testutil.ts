@@ -9,6 +9,8 @@ export function makeWord(over: Partial<Word> = {}): Word {
     user_id: "u1",
     word: over.word ?? `word${n}`,
     created_at: "2026-09-01T00:00:00Z",
+    updated_at: over.updated_at ?? "2026-09-01T00:00:00Z",
+    review_count: over.review_count ?? 0,
     phonetic: null,
     audio_url: null,
     pos: over.pos ?? "noun",

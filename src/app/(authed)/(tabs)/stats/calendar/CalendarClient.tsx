@@ -1,15 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
-import { calendarMonth } from "@/lib/actions";
-import type { CalendarDay } from "@/lib/stats";
+import { useMemo, useState } from "react";
+import { monthActivity } from "@/lib/statsCalc";
+import type { SessionRow } from "@/lib/types";
 import { Screen } from "@/components/ui";
-
-interface MonthData {
-  days: CalendarDay[];
-  firstEverMonth: string | null;
-}
 
 const WEEK = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTH_NAMES = [
@@ -42,42 +37,36 @@ function glyph(sessions: number): string {
 }
 
 export function CalendarClient({
-  month: initialMonth,
-  initial,
+  sessions,
   todayISO,
 }: {
-  month: string;
-  initial: MonthData;
+  sessions: SessionRow[];
   todayISO: string;
 }) {
-  const [month, setMonth] = useState(initialMonth);
-  const [data, setData] = useState<MonthData>(initial);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-
   const currentMonth = todayISO.slice(0, 7);
-  const byDay = useMemo(() => new Map(data.days.map((d) => [d.date, d])), [data.days]);
+  const [month, setMonth] = useState(currentMonth);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const { data, byDay } = useMemo(() => {
+    const d = monthActivity(sessions, month);
+    return { data: d, byDay: new Map(d.days.map((x) => [x.date, x])) };
+  }, [sessions, month]);
 
   const canNext = month < currentMonth;
   const canPrev = !data.firstEverMonth || month > data.firstEverMonth;
 
   function go(delta: number) {
-    const next = shiftMonth(month, delta);
     if (delta > 0 && !canNext) return;
     if (delta < 0 && !canPrev) return;
-    setMonth(next);
     setSelected(null);
-    startTransition(async () => {
-      setData(await calendarMonth(next));
-    });
+    setMonth((m) => shiftMonth(m, delta));
   }
 
   const [y, m] = month.split("-").map(Number);
   const total = daysInMonth(month);
   const pad = firstWeekday(month);
   const activeDays = data.days.filter((d) => d.sessions > 0);
-  const totalSessions = data.days.reduce((s, d) => s + d.sessions, 0);
-
+  const totalSessions = data.days.reduce((sum, d) => sum + d.sessions, 0);
   const selectedData = selected ? byDay.get(selected) : null;
 
   return (
@@ -90,21 +79,13 @@ export function CalendarClient({
       </div>
 
       <div className="flex items-center justify-between py-2">
-        <button
-          onClick={() => go(-1)}
-          disabled={!canPrev}
-          className="px-3 text-lg disabled:opacity-25"
-        >
+        <button onClick={() => go(-1)} disabled={!canPrev} className="px-3 text-lg disabled:opacity-25">
           ‹
         </button>
-        <span className={pending ? "opacity-50" : ""}>
+        <span>
           {MONTH_NAMES[m - 1]} {y}
         </span>
-        <button
-          onClick={() => go(1)}
-          disabled={!canNext}
-          className="px-3 text-lg disabled:opacity-25"
-        >
+        <button onClick={() => go(1)} disabled={!canNext} className="px-3 text-lg disabled:opacity-25">
           ›
         </button>
       </div>
@@ -146,16 +127,12 @@ export function CalendarClient({
         {activeDays.length} days active · {totalSessions} sessions
       </div>
 
-      {selectedData && (
-        <div className="mt-3 rounded-2xl border border-border bg-surface p-3 text-sm">
-          {Number(selected!.slice(-2))} {MONTH_NAMES[m - 1].slice(0, 3)} ·{" "}
-          {selectedData.sessions} session{selectedData.sessions === 1 ? "" : "s"} ·{" "}
-          {selectedData.words} words
-        </div>
-      )}
-      {selected && !selectedData && (
-        <div className="mt-3 text-sm text-text-faint">
-          {Number(selected.slice(-2))} {MONTH_NAMES[m - 1].slice(0, 3)} · no activity
+      {selected && (
+        <div className="mt-3 text-sm text-text-dim">
+          {Number(selected.slice(-2))} {MONTH_NAMES[m - 1].slice(0, 3)} ·{" "}
+          {selectedData
+            ? `${selectedData.sessions} session${selectedData.sessions === 1 ? "" : "s"} · ${selectedData.words} words`
+            : "no activity"}
         </div>
       )}
 

@@ -2,10 +2,37 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { addWord } from "@/lib/actions";
-import type { GeneratedPackage } from "@/lib/types";
+import { addDays, today } from "@/lib/date";
+import type { GeneratedPackage, Word } from "@/lib/types";
+import { useAppData } from "@/lib/store/provider";
 import { Button, Card, Screen } from "@/components/ui";
 import { WordPackage } from "@/components/WordPackage";
+
+function packageToWord(pkg: GeneratedPackage): Word {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    user_id: "",
+    word: pkg.word,
+    created_at: now,
+    updated_at: now,
+    phonetic: pkg.phonetic,
+    audio_url: pkg.audio_url,
+    pos: pkg.pos,
+    definition: pkg.definition,
+    origin: pkg.origin,
+    other_meanings: pkg.other_meanings,
+    sentences: pkg.sentences,
+    distractor_defs: pkg.distractor_defs,
+    distractor_words: pkg.distractor_words,
+    level: 1,
+    streak: 0,
+    due_date: addDays(today(), 1),
+    lapse_count: 0,
+    review_count: 0,
+    last_seen_date: null,
+  };
+}
 
 type GenResponse =
   | { status: "ok"; package: GeneratedPackage }
@@ -17,6 +44,7 @@ type GenResponse =
   | { status: "rate_limited"; limit: number };
 
 export default function AddWordPage() {
+  const { addWord, online, deck } = useAppData();
   const [term, setTerm] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "preview">("idle");
   const [result, setResult] = useState<GenResponse | null>(null);
@@ -35,8 +63,20 @@ export default function AddWordPage() {
   }, [toast]);
 
   async function search(word: string) {
-    const q = word.trim();
+    const q = word.trim().toLowerCase();
     if (!q) return;
+    const local = deck.find((w) => w.word === q);
+    if (local) {
+      setResult({
+        status: "duplicate",
+        word: { id: local.id, word: local.word, level: local.level, due_date: local.due_date },
+      });
+      return;
+    }
+    if (!online) {
+      setResult({ status: "unavailable" });
+      return;
+    }
     setState("loading");
     setResult(null);
     try {
@@ -58,7 +98,7 @@ export default function AddWordPage() {
     if (result?.status !== "ok") return;
     setSaving(true);
     try {
-      await addWord(result.package);
+      await addWord(packageToWord(result.package));
       setToast(`${result.package.word} saved`);
       setTerm("");
       setResult(null);

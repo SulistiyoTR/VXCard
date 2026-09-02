@@ -1,10 +1,13 @@
+"use client";
+
 import Link from "next/link";
-import { getStatsOverview } from "@/lib/stats";
+import { CONFIG } from "@/lib/config";
+import { statsOverview } from "@/lib/statsCalc";
+import { useAppData } from "@/lib/store/provider";
+import { EnableReminders } from "@/components/EnableReminders";
 import { PageTitle, Screen } from "@/components/ui";
 import { RefreshSentencesButton } from "./RefreshSentencesButton";
 import { SignOutButton } from "./SignOutButton";
-
-export const dynamic = "force-dynamic";
 
 const LEVEL_ROWS: { key: number; label: string }[] = [
   { key: 1, label: "L1" },
@@ -14,13 +17,18 @@ const LEVEL_ROWS: { key: number; label: string }[] = [
   { key: 5, label: "✓" },
 ];
 
-export default async function StatsPage() {
-  const s = await getStatsOverview();
+export default function StatsPage() {
+  const { deck, sessions, reviews, online } = useAppData();
+  const s = statsOverview(deck, sessions, reviews);
   const maxLevel = Math.max(1, ...Object.values(s.levels));
+
+  const staleSubjects = deck
+    .filter((w) => w.sentences.some((x) => x.used_count >= CONFIG.REFRESH_THRESHOLD))
+    .map((w) => ({ id: w.id, word: w.word, pos: w.pos, definition: w.definition }));
 
   return (
     <Screen className="px-5 pb-6">
-      <PageTitle>Stats</PageTitle>
+      <PageTitle right={online ? undefined : "offline"}>Stats</PageTitle>
 
       <div className="text-center">
         <div className="text-4xl">🔥 {s.streak}</div>
@@ -70,12 +78,15 @@ export default async function StatsPage() {
         <p className="mt-2 text-sm text-text-faint">No reviews yet.</p>
       )}
 
-      {s.refreshReady > 0 && (
+      {staleSubjects.length > 0 && (
         <>
           <Divider />
-          <RefreshSentencesButton ready={s.refreshReady} />
+          <RefreshSentencesButton subjects={staleSubjects} disabled={!online} />
         </>
       )}
+
+      <Divider />
+      <EnableReminders />
 
       <Divider />
       <SignOutButton />

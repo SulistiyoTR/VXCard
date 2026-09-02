@@ -3,23 +3,18 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
-import { deleteWord, regenerateSentence, resetWord } from "@/lib/actions";
-import { daysBetween, today } from "@/lib/date";
+import { regenerateSentence } from "@/lib/actions";
+import { addDays, daysBetween, today } from "@/lib/date";
+import { useAppData } from "@/lib/store/provider";
 import type { Word } from "@/lib/types";
 import { LevelDots, Screen } from "@/components/ui";
 import { Speak } from "@/components/Speak";
 
-export function WordDetailClient({
-  word,
-  counts,
-}: {
-  word: Word;
-  counts: { reviewed: number; missed: number };
-}) {
+export function WordDetailClient({ word }: { word: Word }) {
   const router = useRouter();
+  const { patchWord, removeWord, online } = useAppData();
   const [menu, setMenu] = useState(false);
-  const [confirm, setConfirm] = useState<null | "delete">(null);
-  const [sentences, setSentences] = useState(word.sentences);
+  const [confirm, setConfirm] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [busyIdx, setBusyIdx] = useState<number | null>(null);
   const [showMeanings, setShowMeanings] = useState(false);
@@ -27,16 +22,31 @@ export function WordDetailClient({
 
   const days = daysBetween(today(), word.due_date);
   const nextLabel = days <= 0 ? "now" : days === 1 ? "tomorrow" : `in ${days} days`;
-  const visible = showAll ? sentences : sentences.slice(0, 2);
+  const visible = showAll ? word.sentences : word.sentences.slice(0, 2);
 
   async function regen(i: number) {
     setBusyIdx(i);
     try {
-      const fresh = await regenerateSentence(word.id, i);
-      setSentences((s) => s.map((x, idx) => (idx === i ? fresh : x)));
+      const fresh = await regenerateSentence({
+        word: word.word,
+        pos: word.pos,
+        definition: word.definition,
+      });
+      const sentences = word.sentences.map((x, idx) => (idx === i ? fresh : x));
+      await patchWord(word.id, { sentences });
     } finally {
       setBusyIdx(null);
     }
+  }
+
+  async function reset() {
+    await patchWord(word.id, {
+      level: 1,
+      streak: 0,
+      lapse_count: 0,
+      due_date: addDays(today(), 1),
+    });
+    setMenu(false);
   }
 
   return (
@@ -56,18 +66,14 @@ export function WordDetailClient({
             className="w-full rounded-xl px-3 py-2 text-left text-bad active:bg-surface-2"
             onClick={() => {
               setMenu(false);
-              setConfirm("delete");
+              setConfirm(true);
             }}
           >
             Delete word
           </button>
           <button
             className="w-full rounded-xl px-3 py-2 text-left active:bg-surface-2"
-            onClick={async () => {
-              setMenu(false);
-              await resetWord(word.id);
-              router.refresh();
-            }}
+            onClick={reset}
           >
             Reset progress
           </button>
@@ -119,17 +125,18 @@ export function WordDetailClient({
             <span className="italic text-text-dim">&ldquo;{s.text}&rdquo;</span>
             <button
               onClick={() => regen(i)}
-              disabled={busyIdx === i}
-              className="shrink-0 text-accent disabled:opacity-40"
+              disabled={busyIdx === i || !online}
+              title={online ? "Regenerate" : "Needs a connection"}
+              className="shrink-0 text-accent disabled:opacity-30"
             >
               {busyIdx === i ? "…" : "✎"}
             </button>
           </li>
         ))}
       </ul>
-      {sentences.length > 2 && !showAll && (
+      {word.sentences.length > 2 && !showAll && (
         <button className="mt-2 text-sm text-accent" onClick={() => setShowAll(true)}>
-          (+{sentences.length - 2} more)
+          (+{word.sentences.length - 2} more)
         </button>
       )}
 
@@ -139,40 +146,25 @@ export function WordDetailClient({
         <div>
           <LevelDots level={word.level} streak={word.streak} />
         </div>
-        <div className="flex justify-between">
-          <span className="text-text-faint">Next review</span>
-          <span>{nextLabel}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-text-faint">Added</span>
-          <span>{word.created_at.slice(0, 10)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-text-faint">Reviewed</span>
-          <span>{counts.reviewed} times</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-text-faint">Missed</span>
-          <span>{counts.missed} times</span>
-        </div>
+        <Line label="Next review" value={nextLabel} />
+        <Line label="Added" value={word.created_at.slice(0, 10)} />
+        <Line label="Reviewed" value={`${word.review_count} times`} />
+        <Line label="Missed" value={`${word.lapse_count} times`} />
       </div>
 
-      {confirm === "delete" && (
+      {confirm && (
         <div className="fixed inset-0 z-20 flex items-end bg-black/60 p-5 safe-b">
           <div className="w-full rounded-3xl border border-border bg-surface p-5">
             <p className="font-semibold">Delete &ldquo;{word.word}&rdquo;?</p>
             <p className="mt-1 text-sm text-text-dim">This can&rsquo;t be undone.</p>
             <div className="mt-4 flex gap-2">
-              <button
-                className="flex-1 rounded-2xl bg-surface-2 py-3"
-                onClick={() => setConfirm(null)}
-              >
+              <button className="flex-1 rounded-2xl bg-surface-2 py-3" onClick={() => setConfirm(false)}>
                 Cancel
               </button>
               <button
                 className="flex-1 rounded-2xl bg-bad/20 py-3 text-bad"
                 onClick={async () => {
-                  await deleteWord(word.id);
+                  await removeWord(word.id);
                   router.push("/words");
                 }}
               >
@@ -187,5 +179,14 @@ export function WordDetailClient({
         ← All words
       </Link>
     </Screen>
+  );
+}
+
+function Line({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-text-faint">{label}</span>
+      <span>{value}</span>
+    </div>
   );
 }

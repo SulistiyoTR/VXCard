@@ -2,15 +2,30 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createSession, finishSession, regenerateSentence, submitAnswer } from "@/lib/actions";
+import { regenerateSentence } from "@/lib/actions";
 import { CONFIG } from "@/lib/config";
 import { daysBetween, today } from "@/lib/date";
 import { buildQuestion, hintBudget, hintMask, matchTyped, nextHintPosition, quizLevel, type Question } from "@/lib/quiz";
 import { buildPracticeSession } from "@/lib/session";
 import { scoreAnswer, updateCard, updateCardHardMode } from "@/lib/scheduler";
-import type { CardState, ReviewResult, SessionItem, Word } from "@/lib/types";
+import { useAppData } from "@/lib/store/provider";
+import type { CardState, ReviewResult, SessionItem, SessionRow, Word } from "@/lib/types";
 import { Button } from "@/components/ui";
 import { WordPackage } from "@/components/WordPackage";
+
+function newSessionRow(planned: number, source: SessionRow["source"]): SessionRow {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    started_at: now,
+    finished_at: null,
+    completed: false,
+    planned,
+    answered: 0,
+    source,
+    updated_at: now,
+  };
+}
 
 interface Entry {
   item: SessionItem;
@@ -31,20 +46,21 @@ interface Outcome {
 type Phase = "question" | "feedback" | "done";
 
 export function SessionRunner({
-  sessionId: initialSessionId,
   entries: initialEntries,
   deck,
   hardMode,
 }: {
-  sessionId: string;
   entries: Entry[];
   deck: Word[];
   hardMode: boolean;
 }) {
   const router = useRouter();
+  const { patchWord, recordReview, upsertSession } = useAppData();
   const planned = initialEntries.length;
 
-  const [sessionId, setSessionId] = useState(initialSessionId);
+  const sessionRef = useRef<SessionRow>(
+    newSessionRow(planned, hardMode ? "hardmode" : "mixed"),
+  );
   const [queue, setQueue] = useState<Entry[]>(initialEntries);
   const [pos, setPos] = useState(0);
   const [phase, setPhase] = useState<Phase>("question");
@@ -56,11 +72,27 @@ export function SessionRunner({
   const startRef = useRef(0);
   useEffect(() => {
     startRef.current = Date.now();
-  }, []);
+    void upsertSession(sessionRef.current);
+  }, [upsertSession]);
   const demotionsRef = useRef(0);
   const requeued = useRef<Set<string>>(new Set());
 
   const entry = queue[pos];
+
+  const persistSession = useCallback(
+    (answered: number, completed: boolean) => {
+      const row: SessionRow = {
+        ...sessionRef.current,
+        answered,
+        completed,
+        finished_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      sessionRef.current = row;
+      void upsertSession(row);
+    },
+    [upsertSession],
+  );
 
   const record = useCallback(
     (result: ReviewResult, helpUsed: number, extra: { typedAnswer?: string; almost?: boolean } = {}) => {
@@ -82,7 +114,6 @@ export function SessionRunner({
         newState = updateCard(cardState, result);
       }
 
-      const sentenceIndex = entry.question.sentenceIndex;
       const outcome: Outcome = {
         entry,
         result,
@@ -96,21 +127,25 @@ export function SessionRunner({
       setOutcomes((o) => [...o, outcome]);
       setPhase("feedback");
 
-      // Background write (SPEC 5.5) — retry a couple of times, then give up quietly.
-      void retry(() =>
-        submitAnswer({
-          review: {
-            word_id: word.id,
-            level: quizLevel(word.level),
-            result,
-            duration_ms: Math.min(durationMs, 120_000),
-            help_used: helpUsed,
-            source: entry.item.source,
-          },
-          card: { id: word.id, ...newState },
-          sentenceShownIndex: sentenceIndex,
-        }),
-      );
+      // Local write — the store queues the sync (SPEC 5.5 / 6.4).
+      void patchWord(word.id, {
+        level: newState.level,
+        streak: newState.streak,
+        due_date: newState.due_date,
+        lapse_count: newState.lapse_count,
+        last_seen_date: today(),
+        review_count: word.review_count + 1,
+      });
+      void recordReview({
+        id: crypto.randomUUID(),
+        word_id: word.id,
+        reviewed_at: new Date().toISOString(),
+        level: quizLevel(word.level),
+        result,
+        duration_ms: Math.min(durationMs, 120_000),
+        help_used: helpUsed,
+        source: entry.item.source,
+      });
 
       // Wrong words come back once at the end of the session (SPEC 2.7).
       if ((result === "wrong" || result === "dontknow") && !requeued.current.has(word.id)) {
@@ -118,7 +153,7 @@ export function SessionRunner({
         setQueue((q) => [...q, { item: entry.item, question: buildQuestion(word, quizLevel(word.level), deck) }]);
       }
     },
-    [entry, hardMode, deck],
+    [entry, hardMode, deck, patchWord, recordReview],
   );
 
   function answerChoice(choice: string) {
@@ -157,7 +192,7 @@ export function SessionRunner({
   function next() {
     if (pos + 1 >= queue.length) {
       setPhase("done");
-      void finishSession(sessionId, { answered: outcomes.length, completed: !quitEarly });
+      persistSession(outcomes.length, !quitEarly);
       return;
     }
     setPos((p) => p + 1);
@@ -169,10 +204,10 @@ export function SessionRunner({
     setQuitEarly(true);
     setShowQuit(false);
     setPhase("done");
-    void finishSession(sessionId, { answered: outcomes.length, completed: false });
+    persistSession(outcomes.length, false);
   }
 
-  async function practiceMore() {
+  function practiceMore() {
     const seen = [...new Set(outcomes.map((o) => o.entry.item.word.id))];
     const items = buildPracticeSession(deck, planned, seen);
     if (items.length === 0) return;
@@ -180,8 +215,8 @@ export function SessionRunner({
       item,
       question: buildQuestion(item.word, quizLevel(item.word.level), deck),
     }));
-    const id = await createSession(fresh.length, "practice");
-    setSessionId(id);
+    sessionRef.current = newSessionRow(fresh.length, "practice");
+    void upsertSession(sessionRef.current);
     setQueue(fresh);
     setPos(0);
     setOutcomes([]);
@@ -383,6 +418,7 @@ function FeedbackView({
   onContinue: () => void;
 }) {
   const word = outcome.entry.item.word;
+  const { patchWord, online } = useAppData();
   const [sentences, setSentences] = useState(word.sentences);
   const [regenerating, setRegenerating] = useState(false);
   const line = topLine(outcome);
@@ -396,8 +432,14 @@ function FeedbackView({
   async function changeSentence() {
     setRegenerating(true);
     try {
-      const fresh = await regenerateSentence(word.id, shownIndex);
-      setSentences((s) => s.map((x, i) => (i === shownIndex ? fresh : x)));
+      const fresh = await regenerateSentence({
+        word: word.word,
+        pos: word.pos,
+        definition: word.definition,
+      });
+      const updated = sentences.map((x, i) => (i === shownIndex ? fresh : x));
+      setSentences(updated);
+      await patchWord(word.id, { sentences: updated });
     } catch {
       /* ignore */
     } finally {
@@ -438,7 +480,8 @@ function FeedbackView({
       </div>
       <button
         onClick={changeSentence}
-        disabled={regenerating}
+        disabled={regenerating || !online}
+        title={online ? undefined : "Needs a connection"}
         className="mt-2 self-end text-sm text-accent disabled:opacity-40"
       >
         {regenerating ? "…" : "✎ change sentence"}
@@ -563,15 +606,3 @@ function Row({ word, from, to }: { word: string; from: number; to: number }) {
   );
 }
 
-/* ---------------------------------------------------------------- utils */
-
-async function retry(fn: () => Promise<unknown>, attempts = 3) {
-  for (let i = 0; i < attempts; i++) {
-    try {
-      await fn();
-      return;
-    } catch {
-      await new Promise((r) => setTimeout(r, 800 * (i + 1)));
-    }
-  }
-}

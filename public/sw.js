@@ -1,8 +1,7 @@
-/* VX Card service worker — app-shell caching only (SPEC 6.1).
-   Offline-first data (IndexedDB) is V3; this just makes the installed PWA
-   launch instantly and survive flaky connections. */
-const CACHE = "vx-card-v1";
-const SHELL = ["/", "/add", "/words", "/stats", "/icon-192.png", "/icon-512.png"];
+/* VX Card service worker — app shell cache (SPEC 6.1) + Web Push (SPEC 6.3).
+   The offline data layer itself is IndexedDB (see src/lib/store), not the SW. */
+const CACHE = "vx-card-v2";
+const SHELL = ["/", "/add", "/words", "/stats", "/stats/calendar", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -23,7 +22,6 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  // Never cache API / auth / server-action traffic.
   if (url.pathname.startsWith("/api") || url.pathname.startsWith("/auth")) return;
 
   if (request.mode === "navigate") {
@@ -51,5 +49,34 @@ self.addEventListener("fetch", (event) => {
           return res;
         }),
     ),
+  );
+});
+
+self.addEventListener("push", (event) => {
+  let data = { title: "VX Card", body: "Time to review", url: "/" };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch {
+    /* keep defaults */
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      data: { url: data.url },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = event.notification.data?.url || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const open = clients.find((c) => "focus" in c);
+      if (open) return open.focus();
+      return self.clients.openWindow(target);
+    }),
   );
 });

@@ -35,8 +35,23 @@ export interface Word {
   /** ISO date (YYYY-MM-DD). */
   due_date: string;
   lapse_count: number;
+  /** Total reviews of this card — denormalised so Word detail works offline (SPEC 4.9). */
+  review_count: number;
   /** ISO date; anti-duplicate marker within a session. */
   last_seen_date: string | null;
+  /** ISO timestamp; drives last-write-wins sync (SPEC 6.4). */
+  updated_at: string;
+}
+
+export interface SessionRow {
+  id: string;
+  started_at: string;
+  finished_at: string | null;
+  completed: boolean;
+  planned: number;
+  answered: number;
+  source: ReviewSource | "mixed";
+  updated_at: string;
 }
 
 export type ReviewResult = "correct" | "slow" | "wrong" | "dontknow";
