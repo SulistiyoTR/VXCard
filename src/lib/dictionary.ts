@@ -187,6 +187,43 @@ async function tryMw(word: string): Promise<DictionaryLookup | null> {
 
 /* ----------------------------------------------------------------- lookup */
 
+/** Per-source diagnostics for GET /api/generate. */
+export async function probeDictionary(): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+
+  try {
+    const res = await fetchWithTimeout(`${FREE_API}/test`, 7000, {
+      headers: { accept: "application/json" },
+    });
+    out.dictionaryapi_dev = res.ok ? "ok" : `HTTP ${res.status}`;
+  } catch (e) {
+    out.dictionaryapi_dev = `unreachable — ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  const key = process.env.MERRIAM_WEBSTER_KEY;
+  if (!key) {
+    out.merriam_webster = "MERRIAM_WEBSTER_KEY not set";
+  } else {
+    try {
+      const res = await fetchWithTimeout(
+        `${MW_API}/test?key=${encodeURIComponent(key)}`,
+        8000,
+        { headers: { accept: "application/json" } },
+      );
+      if (!res.ok) out.merriam_webster = `HTTP ${res.status}`;
+      else {
+        const data = (await res.json()) as unknown[];
+        out.merriam_webster = Array.isArray(data) ? "ok" : "unexpected response";
+      }
+    } catch (e) {
+      out.merriam_webster = `unreachable — ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  out.primary = process.env.DICTIONARY_PRIMARY === "mw" && key ? "merriam_webster" : "dictionaryapi_dev";
+  return out;
+}
+
 export async function lookupWord(word: string): Promise<DictionaryLookup> {
   const mwFirst =
     Boolean(process.env.MERRIAM_WEBSTER_KEY) && process.env.DICTIONARY_PRIMARY === "mw";
