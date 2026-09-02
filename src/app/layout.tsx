@@ -16,9 +16,7 @@ export const metadata: Metadata = {
     statusBarStyle: "black",
     title: "VX Card",
   },
-  icons: {
-    apple: "/icon-192.png",
-  },
+  // Favicon + apple-touch-icon come from src/app/icon.png and src/app/apple-icon.png.
 };
 
 export const viewport: Viewport = {

@@ -1,73 +1,37 @@
-// Generates simple placeholder PWA icons (solid background + "VX" wordmark grid).
-// No image deps — hand-rolls a PNG. Replace with real art later.
-import { deflateSync } from "node:zlib";
-import { writeFileSync, mkdirSync } from "node:fs";
+// Renders the VX Card app icon (newsprint direction) to the PNGs the PWA needs.
+// Run: node scripts/make-icons.mjs   (requires the `sharp` devDependency)
+import { mkdirSync, writeFileSync } from "node:fs";
+import sharp from "sharp";
 
-function crc32(buf) {
-  let c = ~0;
-  for (let i = 0; i < buf.length; i++) {
-    c ^= buf[i];
-    for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
-  }
-  return ~c >>> 0;
-}
+const CREAM = "#f4f1e9";
+const INK = "#131313";
+const RULE = "#b7a57c";
 
-function chunk(type, data) {
-  const t = Buffer.from(type, "ascii");
-  const len = Buffer.alloc(4);
-  len.writeUInt32BE(data.length);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(Buffer.concat([t, data])));
-  return Buffer.concat([len, t, data, crc]);
-}
-
-function png(size, draw) {
-  const bpp = 4;
-  const raw = Buffer.alloc((size * bpp + 1) * size);
-  for (let y = 0; y < size; y++) {
-    raw[y * (size * bpp + 1)] = 0; // filter: none
-    for (let x = 0; x < size; x++) {
-      const [r, g, b, a] = draw(x, y);
-      const o = y * (size * bpp + 1) + 1 + x * bpp;
-      raw[o] = r;
-      raw[o + 1] = g;
-      raw[o + 2] = b;
-      raw[o + 3] = a;
-    }
-  }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 6; // color type RGBA
-  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  return Buffer.concat([
-    sig,
-    chunk("IHDR", ihdr),
-    chunk("IDAT", deflateSync(raw)),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-
-// A dark rounded field with an accent diagonal — distinctive enough at small sizes.
-function draw(size) {
-  const radius = size * 0.22;
-  return (x, y) => {
-    // rounded-corner mask
-    const cx = Math.min(x, size - 1 - x);
-    const cy = Math.min(y, size - 1 - y);
-    if (cx < radius && cy < radius) {
-      const dx = radius - cx;
-      const dy = radius - cy;
-      if (dx * dx + dy * dy > radius * radius) return [0, 0, 0, 0];
-    }
-    const onBar = Math.abs((x - y) - 0) < size * 0.13 || Math.abs(x + y - size) < size * 0.13;
-    return onBar ? [79, 140, 255, 255] : [17, 17, 19, 255];
-  };
+// Full-bleed square — iOS and Android apply their own corner mask.
+function render(size) {
+  const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="${CREAM}"/>
+    <text x="256" y="330" text-anchor="middle"
+      font-family="'Bodoni 72','Didot','Playfair Display',Georgia,'Times New Roman',serif"
+      font-weight="700" font-size="246" letter-spacing="4" fill="${INK}">VX</text>
+    <rect x="168" y="360" width="176" height="3.5" rx="1.75" fill="${RULE}"/>
+    <text x="261" y="444" text-anchor="middle"
+      font-family="'Helvetica Neue',Helvetica,Arial,sans-serif"
+      font-weight="500" font-size="55" letter-spacing="16" fill="#1a1a1a">CARD</text>
+  </svg>`;
+  return sharp(Buffer.from(doc)).png();
 }
 
 mkdirSync("public", { recursive: true });
-for (const size of [192, 512]) {
-  writeFileSync(`public/icon-${size}.png`, png(size, draw(size)));
-  console.log(`wrote public/icon-${size}.png`);
+
+const targets = [
+  ["public/icon-192.png", 192],
+  ["public/icon-512.png", 512],
+  ["src/app/icon.png", 256],
+  ["src/app/apple-icon.png", 180],
+];
+
+for (const [path, size] of targets) {
+  writeFileSync(path, await render(size).toBuffer());
+  console.log("wrote", path, `${size}×${size}`);
 }
