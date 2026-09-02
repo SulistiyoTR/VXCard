@@ -34,20 +34,24 @@ function packageToWord(pkg: GeneratedPackage): Word {
   };
 }
 
-type GenResponse =
+type Stage = "lookup" | "sentences" | "distractors";
+
+type GenResult =
   | { status: "ok"; package: GeneratedPackage }
   | { status: "duplicate"; word: { id: string; word: string; level: number; due_date: string } }
   | { status: "suggestion"; word: string; suggestion: string }
   | { status: "not_found"; word: string }
   | { status: "phrase" }
-  | { status: "unavailable" }
-  | { status: "rate_limited"; limit: number };
+  | { status: "rate_limited"; limit: number }
+  | { status: "error"; detail: string }
+  | { status: "unavailable" }; // client-side: offline or the stream never arrived
 
 export default function AddWordPage() {
   const { addWord, online, deck } = useAppData();
   const [term, setTerm] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "preview">("idle");
-  const [result, setResult] = useState<GenResponse | null>(null);
+  const [stage, setStage] = useState<Stage>("lookup");
+  const [result, setResult] = useState<GenResult | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -62,9 +66,10 @@ export default function AddWordPage() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  async function search(word: string) {
-    const q = word.trim().toLowerCase();
+  async function search(raw: string) {
+    const q = raw.trim().toLowerCase();
     if (!q) return;
+
     const local = deck.find((w) => w.word === q);
     if (local) {
       setResult({
@@ -77,17 +82,50 @@ export default function AddWordPage() {
       setResult({ status: "unavailable" });
       return;
     }
+
     setState("loading");
+    setStage("lookup");
     setResult(null);
+
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ word: q }),
       });
-      const data = (await res.json()) as GenResponse;
-      setResult(data);
-      setState(data.status === "ok" ? "preview" : "idle");
+      if (!res.ok || !res.body) {
+        setResult({ status: "unavailable" });
+        setState("idle");
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let final: GenResult | null = null;
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf("\n\n")) !== -1) {
+          const chunk = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 2);
+          if (!chunk.startsWith("data:")) continue;
+          const ev = JSON.parse(chunk.slice(5).trim());
+          if (ev.type === "stage") setStage(ev.stage as Stage);
+          else if (ev.type === "result") final = ev.result as GenResult;
+        }
+      }
+
+      if (!final) {
+        setResult({ status: "unavailable" });
+        setState("idle");
+        return;
+      }
+      setResult(final);
+      setState(final.status === "ok" ? "preview" : "idle");
     } catch {
       setResult({ status: "unavailable" });
       setState("idle");
@@ -114,10 +152,10 @@ export default function AddWordPage() {
   return (
     <Screen className="px-5 pt-6">
       <div className="flex items-center gap-3">
-        <Link href="/" className="text-text-dim">
+        <Link href="/" className="text-lg text-text-dim">
           ←
         </Link>
-        <h1 className="text-xl font-bold">Add word</h1>
+        <h1 className="font-serif text-[22px] font-medium">Add word</h1>
       </div>
 
       <form
@@ -137,18 +175,25 @@ export default function AddWordPage() {
           autoComplete="off"
           enterKeyHint="search"
           placeholder="a single word"
-          className="flex-1 rounded-2xl border border-border bg-surface px-4 py-3 text-lg outline-none focus:border-accent"
+          className="flex-1 rounded-[14px] border border-border bg-surface px-4 py-3 font-serif text-lg outline-none focus:border-accent"
         />
         <Button type="submit" className="w-auto px-5" disabled={state === "loading"}>
           {state === "loading" ? "…" : "Search"}
         </Button>
       </form>
 
-      <div className="mt-5 flex-1">
-        {state === "loading" && <p className="text-text-dim">Building the card… (3–5s)</p>}
+      <div className="mt-6 flex-1">
+        {state === "loading" && <GenProgress term={term.trim().toLowerCase()} stage={stage} />}
 
         {result && result.status !== "ok" && (
-          <ErrorState result={result} onPick={(w) => { setTerm(w); void search(w); }} />
+          <ResultCard
+            result={result}
+            onPick={(w) => {
+              setTerm(w);
+              void search(w);
+            }}
+            onRetry={() => void search(term)}
+          />
         )}
 
         {state === "preview" && result?.status === "ok" && (
@@ -194,12 +239,41 @@ export default function AddWordPage() {
   );
 }
 
-function ErrorState({
+function GenProgress({ term, stage }: { term: string; stage: Stage }) {
+  const idx = stage === "lookup" ? 0 : stage === "sentences" ? 1 : 2;
+  const steps = [
+    `Looking up “${term}”`,
+    "Writing 5 example sentences",
+    "Building the answer options",
+  ];
+  return (
+    <ul className="space-y-3">
+      {steps.map((s, i) => (
+        <li key={i} className="flex items-center gap-3 text-sm">
+          <span className="w-4 text-center">
+            {i < idx ? (
+              <span className="text-good">✓</span>
+            ) : i === idx ? (
+              <span className="inline-block animate-spin text-accent">◐</span>
+            ) : (
+              <span className="text-text-faint">○</span>
+            )}
+          </span>
+          <span className={i <= idx ? "text-text" : "text-text-faint"}>{s}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ResultCard({
   result,
   onPick,
+  onRetry,
 }: {
-  result: Exclude<GenResponse, { status: "ok" }>;
+  result: Exclude<GenResult, { status: "ok" }>;
   onPick: (word: string) => void;
+  onRetry: () => void;
 }) {
   switch (result.status) {
     case "duplicate":
@@ -218,11 +292,9 @@ function ErrorState({
       return (
         <Card>
           <p>Did you mean {result.suggestion}?</p>
-          <div className="mt-3 flex gap-2">
-            <Button className="w-auto px-4" onClick={() => onPick(result.suggestion)}>
-              Yes
-            </Button>
-          </div>
+          <Button className="mt-3 w-auto px-4" onClick={() => onPick(result.suggestion)}>
+            Yes
+          </Button>
         </Card>
       );
     case "not_found":
@@ -231,6 +303,16 @@ function ErrorState({
       return <Card>Only single words for now.</Card>;
     case "rate_limited":
       return <Card>Daily limit of {result.limit} new words reached. Try again tomorrow.</Card>;
+    case "error":
+      return (
+        <Card>
+          <p>Couldn&rsquo;t build the card.</p>
+          <p className="mt-2 break-words text-sm text-text-faint">{result.detail}</p>
+          <Button variant="secondary" className="mt-3" onClick={onRetry}>
+            Try again
+          </Button>
+        </Card>
+      );
     case "unavailable":
       return <Card>No connection. Try again later.</Card>;
   }
