@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #000000;
+  --surface: #111113;
+  --surface-2: #1c1c1f;
+  --border: #2a2a2e;
+  --text: #f4f4f5;
+  --text-dim: #a1a1aa;
+  --text-faint: #71717a;
+  --accent: #4f8cff;
+  --good: #34d399;
+  --slow: #fbbf24;
+  --bad: #f87171;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-good: var(--good);
+  --color-slow: var(--slow);
+  --color-bad: var(--bad);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Respect the iOS safe areas so bottom actions stay reachable. */
+.safe-b {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+.safe-t {
+  padding-top: max(0.5rem, env(safe-area-inset-top));
+}
+
+button {
+  cursor: pointer;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.slide-in {
+  animation: slide-in 0.2s ease-out;
+}
