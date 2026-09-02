@@ -1,23 +1,41 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #000000;
-  --surface: #111113;
-  --surface-2: #1c1c1f;
-  --border: #2a2a2e;
-  --text: #f4f4f5;
-  --text-dim: #a1a1aa;
-  --text-faint: #71717a;
-  --accent: #4f8cff;
-  --good: #34d399;
-  --slow: #fbbf24;
-  --bad: #f87171;
+  /* Committed to one visual world — a black home-screen PWA. No light theme. */
+  --bg: #0b0c0e;
+  --surface: #15171a;
+  --surface-2: #1d2024;
+  --surface-3: #282c31;
+  --border: #33373d;
+  --edge: rgba(255, 255, 255, 0.05); /* 1px top-lip that reads as "raised" in dark UI */
+
+  --text: #f2f3f5;
+  --text-dim: #9ca1a9;
+  --text-faint: #656b74;
+
+  --accent: #5c8cf0;
+  --accent-line: rgba(92, 140, 240, 0.45);
+  --accent-glow: rgba(92, 140, 240, 0.22);
+
+  --good: #56d19a;
+  --slow: #f0b64a;
+  --bad: #ee6f6f;
+
+  /* One damped spring, three tempos — motion is information (SPEC 4.5/4.6). */
+  --spring: linear(
+    0, 0.006, 0.025, 0.101, 0.22, 0.363, 0.508, 0.637, 0.744, 0.827, 0.888,
+    0.931, 0.961, 0.98, 0.991, 1.001, 1.002, 1.001, 1
+  );
+  --t-fast: 150ms;
+  --t-mod: 260ms;
+  --t-slow: 440ms;
 }
 
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-border: var(--border);
   --color-text: var(--text);
   --color-text-dim: var(--text-dim);
@@ -26,8 +44,11 @@
   --color-good: var(--good);
   --color-slow: var(--slow);
   --color-bad: var(--bad);
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Newsreader carries the editorial voice; Libre Franklin the mechanical print. */
+  --font-sans: "Libre Franklin", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", "Menlo", monospace;
 }
 
 html {
@@ -43,7 +64,7 @@ body {
   overscroll-behavior-y: none;
 }
 
-/* Respect the iOS safe areas so bottom actions stay reachable. */
+/* iOS safe areas so bottom actions stay under the thumb. */
 .safe-b {
   padding-bottom: max(1rem, env(safe-area-inset-bottom));
 }
@@ -55,16 +76,75 @@ button {
   cursor: pointer;
 }
 
+/* ---- shared motion helpers ---- */
+
+.edge {
+  box-shadow: inset 0 1px 0 var(--edge);
+}
+
+/* Press = scale down + surface lifts one level + weight shift, on the spring. */
+.press {
+  transition:
+    transform var(--t-fast) var(--spring),
+    background-color var(--t-fast) var(--spring),
+    font-weight var(--t-fast) linear;
+}
+.press:active {
+  transform: scale(0.975);
+  font-weight: 600;
+}
+
 @keyframes slide-in {
   from {
     opacity: 0;
     transform: translateX(24px);
   }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
 .slide-in {
-  animation: slide-in 0.2s ease-out;
+  animation: slide-in var(--t-mod) var(--spring);
+}
+
+/* ---- quiz answer options (SPEC 4.5) ---- */
+
+.opt {
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface-2);
+  box-shadow: inset 0 1px 0 var(--edge);
+  padding: 14px 15px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  transition:
+    transform var(--t-fast) var(--spring),
+    background-color var(--t-fast) var(--spring),
+    border-color var(--t-mod) var(--spring),
+    box-shadow var(--t-mod) var(--spring),
+    opacity var(--t-mod) var(--spring),
+    font-weight var(--t-fast) linear;
+}
+.opt:active {
+  transform: scale(0.985);
+  background: var(--surface-3);
+  font-weight: 600;
+}
+.opt.chosen {
+  border-color: var(--accent-line);
+  background: var(--surface-3);
+  font-weight: 600;
+  box-shadow:
+    0 0 0 1px var(--accent-line),
+    0 0 22px -4px var(--accent-glow),
+    inset 0 1px 0 var(--edge);
+}
+.options.decided .opt:not(.chosen) {
+  opacity: 0.32;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }

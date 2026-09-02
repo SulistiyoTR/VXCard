@@ -31,10 +31,10 @@ export function WordPackage(props: WordPackageProps) {
   return (
     <div className="space-y-3">
       <div>
-        <div className="text-2xl font-bold">{props.word}</div>
+        <div className="font-serif text-[27px] font-medium tracking-[-0.01em]">{props.word}</div>
         {props.phonetic ? (
           <div className="flex items-center gap-1 text-text-dim">
-            <span className="font-mono text-sm">{props.phonetic}</span>
+            <span className="text-sm">{props.phonetic}</span>
             <Speak word={props.word} audioUrl={props.audioUrl} />
           </div>
         ) : (
@@ -43,14 +43,14 @@ export function WordPackage(props: WordPackageProps) {
       </div>
 
       <div>
-        <div className="text-sm text-text-faint">{props.pos}</div>
+        <div className="font-serif text-[15px] italic text-text-faint">{props.pos}</div>
         <div className="text-text">{props.definition}</div>
       </div>
 
       {props.sentences.length > 0 && (
-        <ul className="space-y-2 border-l-2 border-border pl-3 text-text-dim italic">
+        <ul className="space-y-2 border-l-2 border-[var(--accent-line)] pl-3.5 font-serif text-[15.5px] italic leading-relaxed text-text-dim">
           {visibleSentences.map((s, i) => (
-            <li key={i}>&ldquo;{s.text}&rdquo;</li>
+            <li key={i}>{s.text}</li>
           ))}
           {props.expandableSentences && hiddenCount > 0 && (
             <li className="not-italic">

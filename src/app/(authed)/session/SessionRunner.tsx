@@ -246,18 +246,22 @@ export function SessionRunner({
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5 pt-4 safe-t">
-      <div className="flex items-center gap-3">
-        <button onClick={() => setShowQuit(true)} className="text-text-dim" aria-label="Quit session">
-          ×
+      <div className="flex items-center gap-3.5">
+        <button
+          onClick={() => setShowQuit(true)}
+          className="text-xl leading-none text-text-dim"
+          aria-label="Quit session"
+        >
+          ✕
         </button>
-        <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2">
+        <div className="h-[5px] flex-1 overflow-hidden rounded-full bg-surface-2">
           <div
-            className="h-full bg-accent transition-all"
+            className="h-full rounded-full bg-accent transition-[width] duration-[440ms] [transition-timing-function:var(--spring)]"
             style={{ width: `${(answered / planned) * 100}%` }}
           />
         </div>
         <span className="text-sm tabular-nums text-text-faint">
-          {Math.min(answered + 1, planned)}/{planned}
+          {Math.min(answered + 1, planned)} / {planned}
         </span>
       </div>
 
@@ -275,8 +279,8 @@ export function SessionRunner({
 
       {showQuit && (
         <div className="fixed inset-0 z-20 flex items-end bg-black/60 p-5 safe-b">
-          <div className="w-full rounded-3xl border border-border bg-surface p-5">
-            <p className="font-semibold">Quit session?</p>
+          <div className="edge w-full rounded-3xl border border-border bg-surface p-5">
+            <p className="font-serif text-xl font-medium">Quit session?</p>
             <p className="mt-1 text-sm text-text-dim">
               Your {answered} answers are saved, but your streak won&rsquo;t count today.
             </p>
@@ -297,6 +301,13 @@ export function SessionRunner({
 
 /* ---------------------------------------------------------------- Question */
 
+const ANSWER_LABEL: Record<number, string> = {
+  1: "Choose the meaning",
+  2: "Which word?",
+  3: "Fill the blank",
+  4: "Type the word",
+};
+
 function QuestionView({
   question,
   onChoice,
@@ -310,7 +321,9 @@ function QuestionView({
 }) {
   const [typed, setTyped] = useState("");
   const [revealed, setRevealed] = useState<number[]>([]);
+  const [chosen, setChosen] = useState<string | null>(null);
   const budget = hintBudget(question.answer);
+  const decided = chosen !== null;
 
   function hint() {
     if (revealed.length >= budget) return;
@@ -318,74 +331,108 @@ function QuestionView({
     if (p >= 0) setRevealed((r) => [...r, p]);
   }
 
-  return (
-    <div className="slide-in flex flex-1 flex-col pt-10">
-      {question.sentence ? (
-        <p className="text-lg leading-relaxed">{question.sentence}</p>
-      ) : (
-        <p className="text-center text-3xl font-bold">{question.prompt}</p>
-      )}
-      {question.sentence && (
-        <p className="mt-2 text-sm text-text-faint">{question.prompt}</p>
-      )}
+  // Let the chosen option's state read for a beat before the feedback slides in.
+  function choose(opt: string) {
+    if (decided) return;
+    setChosen(opt);
+    setTimeout(() => onChoice(opt), 460);
+  }
 
-      {question.level === 4 ? (
-        <form
-          className="mt-auto space-y-3 safe-b"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (typed.trim()) onTyped(typed, revealed.length);
-          }}
-        >
-          <div className="text-center font-mono text-xl tracking-[0.3em]">
-            {hintMask(question.answer, revealed)}
-          </div>
-          <input
-            autoFocus
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            enterKeyHint="done"
-            className="w-full rounded-2xl border border-border bg-surface px-4 py-4 text-center text-xl outline-none focus:border-accent"
-          />
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-auto flex-1"
-              onClick={hint}
-              disabled={revealed.length >= budget}
-            >
-              Hint ({budget - revealed.length})
-            </Button>
-            <Button type="submit" className="w-auto flex-1" disabled={!typed.trim()}>
-              Answer
-            </Button>
-          </div>
-          <button type="button" onClick={onDontKnow} className="w-full py-2 text-text-faint">
-            Don&rsquo;t know
-          </button>
-        </form>
-      ) : (
-        <div className="mt-auto space-y-3 safe-b">
-          <div className="space-y-2">
-            {question.options.map((opt) => (
-              <button
-                key={opt}
-                onClick={() => onChoice(opt)}
-                className="w-full rounded-2xl border border-border bg-surface px-4 py-4 text-left active:bg-surface-2"
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-          <button onClick={onDontKnow} className="w-full py-2 text-text-faint">
-            Don&rsquo;t know
-          </button>
+  const prompt =
+    question.level === 3 ? (
+      <p className="font-serif text-[21px] leading-relaxed text-text">{question.sentence}</p>
+    ) : question.level === 2 ? (
+      <p className="max-w-xs font-serif text-[20px] leading-snug text-text">{question.prompt}</p>
+    ) : (
+      <p className="font-serif text-[44px] font-medium leading-none tracking-[-0.02em]">
+        {question.prompt}
+      </p>
+    );
+
+  return (
+    <div className="slide-in flex flex-1 flex-col pt-8">
+      <div className="flex flex-1 flex-col items-center justify-center px-2 text-center">
+        {question.level === 4 ? (
+          <>
+            <p className="font-serif text-[19px] leading-relaxed text-text">{question.sentence}</p>
+            <div className="mt-6 font-mono text-xl tracking-[0.3em] text-text-dim">
+              {hintMask(question.answer, revealed)}
+            </div>
+          </>
+        ) : (
+          prompt
+        )}
+      </div>
+
+      <div className="safe-b">
+        <div className="mb-3 border-t border-border pt-3.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-text-faint">
+          {ANSWER_LABEL[question.level]}
         </div>
-      )}
+
+        {question.level === 4 ? (
+          <form
+            className="space-y-2.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (typed.trim()) onTyped(typed, revealed.length);
+            }}
+          >
+            <input
+              autoFocus
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              enterKeyHint="done"
+              className="w-full rounded-[14px] border border-border bg-surface px-4 py-4 text-center font-serif text-[22px] outline-none focus:border-accent"
+            />
+            <div className="flex gap-2.5">
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-auto flex-1"
+                onClick={hint}
+                disabled={revealed.length >= budget}
+              >
+                Hint · {budget - revealed.length}
+              </Button>
+              <Button type="submit" className="w-auto flex-1" disabled={!typed.trim()}>
+                Answer
+              </Button>
+            </div>
+            <button
+              type="button"
+              onClick={onDontKnow}
+              className="mx-auto block py-2 text-sm text-text-faint"
+            >
+              Don&rsquo;t know
+            </button>
+          </form>
+        ) : (
+          <>
+            <div className={`options flex flex-col gap-2.5 ${decided ? "decided" : ""}`}>
+              {question.options.map((opt) => (
+                <button
+                  key={opt}
+                  disabled={decided}
+                  onClick={() => choose(opt)}
+                  className={`opt w-full ${chosen === opt ? "chosen" : ""}`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={onDontKnow}
+              disabled={decided}
+              className="mx-auto mt-3.5 block py-2 text-sm text-text-faint disabled:opacity-40"
+            >
+              Don&rsquo;t know
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -449,17 +496,19 @@ function FeedbackView({
 
   return (
     <div className="slide-in flex flex-1 flex-col pt-6">
-      <div className={`text-lg font-semibold ${line.className}`}>
+      <div className={`flex items-center gap-2 text-base font-semibold ${line.className}`}>
         {line.icon} {line.text}
       </div>
       {outcome.result === "wrong" && outcome.typedAnswer && (
-        <div className="text-sm text-text-dim">Your answer: {outcome.typedAnswer}</div>
+        <div className="mt-1 text-sm text-text-dim">Your answer: {outcome.typedAnswer}</div>
       )}
       {outcome.almost && (
-        <div className="text-sm text-slow">Almost — it&rsquo;s spelled {outcome.entry.question.answer}</div>
+        <div className="mt-1 text-sm text-slow">
+          Almost — it&rsquo;s spelled {outcome.entry.question.answer}
+        </div>
       )}
 
-      <div className="my-5 h-px bg-border" />
+      <div className="my-[18px] h-px bg-border" />
 
       <WordPackage
         word={word.word}
@@ -472,7 +521,7 @@ function FeedbackView({
         sentences={shownSentence}
       />
 
-      <div className="my-5 h-px bg-border" />
+      <div className="my-[18px] h-px bg-border" />
 
       <div className="flex items-center justify-between text-sm">
         <LevelIndicator oldLevel={outcome.oldLevel} newState={outcome.newState} />
@@ -482,12 +531,12 @@ function FeedbackView({
         onClick={changeSentence}
         disabled={regenerating || !online}
         title={online ? undefined : "Needs a connection"}
-        className="mt-2 self-end text-sm text-accent disabled:opacity-40"
+        className="mt-2 self-end text-[12.5px] text-accent disabled:opacity-40"
       >
         {regenerating ? "…" : "✎ change sentence"}
       </button>
 
-      <div className="mt-auto safe-b">
+      <div className="mt-auto pt-6 safe-b">
         <Button onClick={onContinue}>Continue →</Button>
       </div>
     </div>
@@ -503,7 +552,7 @@ function LevelIndicator({ oldLevel, newState }: { oldLevel: number; newState: Ca
         <span className="text-good">✓ Finished</span>
       ) : (
         <>
-          Level {newState.level} <span className="tracking-widest">{dots}</span>
+          Level {newState.level} <span className="tracking-[0.18em] text-text">{dots}</span>
           {newState.level !== oldLevel && (
             <span className={newState.level > oldLevel ? "text-good" : "text-slow"}>
               {" "}
