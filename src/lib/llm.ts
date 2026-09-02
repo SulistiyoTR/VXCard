@@ -24,6 +24,23 @@ function parseJson<T>(raw: string): T {
   return JSON.parse(body.slice(start, end + 1)) as T;
 }
 
+/** One tiny call to confirm the key + model work (used by the diagnostics route). */
+export async function pingLLM(): Promise<{ ok: boolean; model: string; detail?: string }> {
+  const model = env.llmModel();
+  try {
+    const msg = await client().messages.create({
+      model,
+      max_tokens: 5,
+      messages: [{ role: "user", content: "Reply with the word OK." }],
+    });
+    return { ok: true, model: msg.model || model };
+  } catch (e) {
+    const o = e as { status?: number; message?: string; error?: { error?: { message?: string } } };
+    const m = o.error?.error?.message ?? o.message ?? String(e);
+    return { ok: false, model, detail: o.status ? `${o.status} — ${m}` : m };
+  }
+}
+
 async function ask(system: string, user: string, maxTokens: number): Promise<string> {
   const msg = await client().messages.create({
     model: env.llmModel(),
