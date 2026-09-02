@@ -1,6 +1,6 @@
 import { CONFIG } from "@/lib/config";
 import { errMessage, normalizeInput, runGenerate } from "@/lib/generate";
-import { lookupWord } from "@/lib/dictionary";
+import { lookupWord, probeDictionary } from "@/lib/dictionary";
 import { pingLLM } from "@/lib/llm";
 import { createClient } from "@/lib/supabase/server";
 
@@ -9,8 +9,9 @@ export const maxDuration = 60;
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/generate — diagnostics. Confirms the dictionary API and the Anthropic
- * key/model both work, in isolation. Auth-gated.
+ * GET /api/generate — diagnostics. Shows the function region, which config is
+ * live, and whether each upstream (both dictionaries + Anthropic) is reachable.
+ * Auth-gated.
  */
 export async function GET() {
   const supabase = await createClient();
@@ -19,19 +20,28 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return new Response("unauthorized", { status: 401 });
 
-  let dictionary: string;
-  try {
-    const r = await lookupWord("test");
-    dictionary = r.ok ? "ok" : `not ok (${r.reason})`;
-  } catch (e) {
-    dictionary = `threw — ${errMessage(e)}`;
-  }
+  const [dict, llm, lookup] = await Promise.all([
+    probeDictionary(),
+    pingLLM(),
+    lookupWord("test").then(
+      (r) => (r.ok ? "ok" : `not ok (${r.reason})`),
+      (e) => `threw — ${errMessage(e)}`,
+    ),
+  ]);
 
-  const llm = await pingLLM();
-  return Response.json({
-    dictionary,
-    anthropic: llm.ok ? `ok (${llm.model})` : `failed — ${llm.detail}`,
-  });
+  return Response.json(
+    {
+      region: process.env.VERCEL_REGION ?? "local",
+      config: {
+        DICTIONARY_PRIMARY: process.env.DICTIONARY_PRIMARY ?? "(unset)",
+        MERRIAM_WEBSTER_KEY: process.env.MERRIAM_WEBSTER_KEY ? "set" : "MISSING",
+        ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL ?? "(default)",
+      },
+      dictionary: { ...dict, lookup_result: lookup },
+      anthropic: llm.ok ? `ok (${llm.model})` : `failed — ${llm.detail}`,
+    },
+    { headers: { "cache-control": "no-store" } },
+  );
 }
 
 /**
