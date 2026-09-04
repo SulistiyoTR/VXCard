@@ -315,7 +315,7 @@ export function SessionRunner({
 
       {showQuit && (
         <div className="fixed inset-0 z-20 flex items-end bg-black/60 p-5 safe-b">
-          <div className="edge w-full rounded-3xl border border-border bg-surface p-5">
+          <div className="edge w-full rounded-[var(--r-card)] border border-border bg-surface p-5">
             <p className="font-serif text-xl font-medium">Quit session?</p>
             <p className="mt-1 text-sm text-text-dim">
               Your {answered} answers are saved, but your streak won&rsquo;t count today.
@@ -421,7 +421,7 @@ function QuestionView({
               autoCapitalize="off"
               spellCheck={false}
               enterKeyHint="done"
-              className="w-full rounded-[14px] border border-border bg-surface px-4 py-4 text-center font-serif text-[22px] outline-none focus:border-accent"
+              className="w-full rounded-[var(--r-input)] border border-border bg-surface px-4 py-4 text-center font-serif text-[22px] outline-none focus:border-accent"
             />
             <div className="flex gap-2.5">
               <Button
@@ -475,19 +475,20 @@ function QuestionView({
 
 /* ---------------------------------------------------------------- Feedback */
 
+// Informative, never punishing (SPEC §2) — a miss reads in dimmed text, not red.
 function topLine(o: Outcome): { icon: string; text: string; className: string } {
   const secs = (o.durationMs / 1000).toFixed(1);
   switch (o.result) {
     case "correct":
-      return { icon: "✅", text: `Correct · ${secs}s`, className: "text-good" };
+      return { icon: "✓", text: `Correct · ${secs}s`, className: "text-good" };
     case "slow":
       return o.helpUsed > 0
-        ? { icon: "🐢", text: `Correct, used ${o.helpUsed} hint${o.helpUsed > 1 ? "s" : ""}`, className: "text-slow" }
-        : { icon: "🐢", text: `Correct, but slow · ${secs}s`, className: "text-slow" };
+        ? { icon: "~", text: `Correct, used ${o.helpUsed} hint${o.helpUsed > 1 ? "s" : ""}`, className: "text-slow" }
+        : { icon: "~", text: `Correct, but slow · ${secs}s`, className: "text-slow" };
     case "wrong":
-      return { icon: "❌", text: "Wrong", className: "text-bad" };
+      return { icon: "✕", text: "Not quite", className: "text-text-dim" };
     case "dontknow":
-      return { icon: "⬜", text: "Not yet — that's fine", className: "text-text-dim" };
+      return { icon: "○", text: "Not yet — that's fine", className: "text-text-dim" };
   }
 }
 
@@ -532,7 +533,12 @@ function FeedbackView({
         {line.icon} {line.text}
       </div>
       {outcome.result === "wrong" && outcome.typedAnswer && (
-        <div className="mt-1 text-sm text-text-dim">Your answer: {outcome.typedAnswer}</div>
+        <div className="mt-1 text-sm text-text-dim">
+          Your answer:{" "}
+          <span className="underline decoration-text-faint underline-offset-2">
+            {outcome.typedAnswer}
+          </span>
+        </div>
       )}
       {outcome.almost && (
         <div className="mt-1 text-sm text-slow">
@@ -575,7 +581,7 @@ function FeedbackView({
         ))}
 
       <div className="mt-auto pt-6 safe-b">
-        <Button onClick={onContinue}>Continue →</Button>
+        <Button onClick={onContinue}>Continue</Button>
       </div>
     </div>
   );
@@ -629,19 +635,18 @@ function CompleteView({
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 pt-16 safe-b">
       <div className="text-center">
-        <div className="text-5xl">✓</div>
-        <h1 className="mt-2 text-2xl font-bold">
+        <h1 className="font-serif text-[26px] font-medium tracking-[-0.01em]">
           {quitEarly ? "Session stopped" : "Session complete"}
         </h1>
       </div>
 
-      <div className="mt-6 flex justify-center gap-6 text-lg">
-        <span>✅ {good}</span>
-        <span>🐢 {slow}</span>
-        <span>❌ {bad}</span>
+      <div className="mt-6 flex justify-center gap-7 text-lg tabular-nums">
+        <span className="text-good">✓ {good}</span>
+        <span className="text-slow">~ {slow}</span>
+        <span className="text-text-dim">✕ {bad}</span>
       </div>
 
-      {allCorrect && <p className="mt-3 text-center text-good">Nice, all correct 🎉</p>}
+      {allCorrect && <p className="mt-3 text-center text-good">Nice — all correct</p>}
 
       {ups.length > 0 && (
         <Section title="Level up">
@@ -676,7 +681,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <div className="mt-6">
       <div className="my-3 h-px bg-border" />
-      <div className="text-sm uppercase tracking-wide text-text-faint">{title}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+        {title}
+      </div>
       <div className="mt-2 space-y-1">{children}</div>
     </div>
   );

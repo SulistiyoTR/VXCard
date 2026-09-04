@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type { WordContent } from "@/lib/types";
 import { useAppData } from "@/lib/store/provider";
-import { Button, Card, Screen } from "@/components/ui";
+import { BackTitle, Button, Card, Screen } from "@/components/ui";
 import { WordPackage } from "@/components/WordPackage";
 
 type GenResult =
@@ -116,15 +116,10 @@ export default function AddWordPage() {
 
   return (
     <Screen className="px-5 pt-6">
-      <div className="flex items-center gap-3">
-        <Link href="/" className="text-lg text-text-dim">
-          ←
-        </Link>
-        <h1 className="font-serif text-[22px] font-medium">Add word</h1>
-      </div>
+      <BackTitle>Add word</BackTitle>
 
       <form
-        className="mt-5 flex gap-2"
+        className="mt-1 flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void search(term);
@@ -140,7 +135,7 @@ export default function AddWordPage() {
           autoComplete="off"
           enterKeyHint="search"
           placeholder="a single word"
-          className="flex-1 rounded-[14px] border border-border bg-surface px-4 py-3 font-serif text-lg outline-none focus:border-accent"
+          className="flex-1 rounded-[var(--r-input)] border border-border bg-surface px-4 py-3 font-serif text-lg outline-none focus:border-accent"
         />
         <Button type="submit" className="w-auto px-5" disabled={state === "loading"}>
           {state === "loading" ? "…" : "Search"}

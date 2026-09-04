@@ -27,7 +27,7 @@ export default function LoginPage() {
   return (
     <Screen className="items-center justify-center gap-8 px-6">
       <div className="text-center">
-        <div className="text-4xl font-bold tracking-tight">VX Card</div>
+        <div className="font-serif text-[40px] font-medium tracking-[-0.02em]">VX Card</div>
         <p className="mt-2 text-text-dim">Vocabulary, one word at a time.</p>
       </div>
       <div className="w-full">

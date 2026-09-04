@@ -153,6 +153,14 @@ export async function getDeck(): Promise<Word[]> {
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
+/** First name from the Google profile, for the Home greeting. Null if none. */
+export async function getFirstName(): Promise<string | null> {
+  const user = await requireUser();
+  const m = (user.user_metadata ?? {}) as Record<string, unknown>;
+  const raw = String(m.given_name || m.name || m.full_name || "").trim();
+  return raw ? raw.split(/\s+/)[0] : null;
+}
+
 export async function getSessions(): Promise<SessionRow[]> {
   const supabase = await createClient();
   const user = await requireUser();

@@ -1,10 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { monthActivity } from "@/lib/statsCalc";
 import type { SessionRow } from "@/lib/types";
-import { Screen } from "@/components/ui";
+import { BackTitle, Screen } from "@/components/ui";
 
 const WEEK = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTH_NAMES = [
@@ -70,13 +69,8 @@ export function CalendarClient({
   const selectedData = selected ? byDay.get(selected) : null;
 
   return (
-    <Screen className="px-5 pb-8">
-      <div className="flex items-center gap-3 py-4">
-        <Link href="/stats" className="text-text-dim">
-          ←
-        </Link>
-        <h1 className="text-xl font-bold">Activity</h1>
-      </div>
+    <Screen className="px-5 pb-8 pt-6">
+      <BackTitle href="/stats">Calendar</BackTitle>
 
       <div className="flex items-center justify-between py-2">
         <button onClick={() => go(-1)} disabled={!canPrev} className="px-3 text-lg disabled:opacity-25">

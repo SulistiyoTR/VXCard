@@ -22,6 +22,8 @@ export interface AppData {
   ready: boolean;
   online: boolean;
   syncing: boolean;
+  /** First name from the Google profile, for the Home greeting. Null if none. */
+  firstName: string | null;
   deck: Word[];
   sessions: SessionRow[];
   reviews: Review[];
@@ -43,9 +45,11 @@ const Ctx = createContext<AppData | null>(null);
 export function AppDataProvider({
   children,
   snapshot,
+  firstName = null,
 }: {
   children: React.ReactNode;
   snapshot: { deck: Word[]; sessions: SessionRow[] };
+  firstName?: string | null;
 }) {
   const online = useOnline();
   const [ready, setReady] = useState(false);
@@ -176,6 +180,7 @@ export function AppDataProvider({
         ready,
         online,
         syncing,
+        firstName,
         deck,
         sessions,
         reviews,

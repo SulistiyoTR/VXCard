@@ -4,7 +4,7 @@ import Link from "next/link";
 import { statsOverview } from "@/lib/statsCalc";
 import { useAppData } from "@/lib/store/provider";
 import { EnableReminders } from "@/components/EnableReminders";
-import { PageTitle, Screen } from "@/components/ui";
+import { PageTitle, Screen, Tally } from "@/components/ui";
 import { SignOutButton } from "./SignOutButton";
 
 const LEVEL_ROWS: { key: number; label: string }[] = [
@@ -24,17 +24,21 @@ export default function StatsPage() {
     <Screen className="px-5 pb-6">
       <PageTitle right={online ? undefined : "offline"}>Stats</PageTitle>
 
-      <div className="text-center">
-        <div className="text-4xl">🔥 {s.streak}</div>
-        <div className="text-text-dim">day streak</div>
-        <div className="text-sm text-text-faint">best: {s.best} days</div>
+      <div className="flex flex-col items-center text-center">
+        <Tally count={s.streak} className="justify-center text-[30px]" />
+        <div className="mt-3.5 font-serif text-[15px] text-text-dim">
+          {s.streak > 0
+            ? `${s.streak}-day streak · best ${s.best}`
+            : `No streak yet · best ${s.best}`}
+        </div>
       </div>
 
       <Link
         href="/stats/calendar"
-        className="mt-4 block rounded-2xl border border-border bg-surface py-3 text-center"
+        className="mt-5 flex items-center justify-between rounded-[var(--r-input)] border border-border bg-surface px-4 py-3.5"
       >
-        📅 Calendar
+        <span className="text-sm text-text-dim">View calendar</span>
+        <span className="font-mono tracking-[2px] text-text-faint">░░▒░▓▒░▓░░▒▓</span>
       </Link>
 
       <Divider />
@@ -44,7 +48,7 @@ export default function StatsPage() {
       </div>
 
       <Divider />
-      <div className="text-sm uppercase tracking-wide text-text-faint">Level breakdown</div>
+      <Label>Level breakdown</Label>
       <div className="mt-2 space-y-1">
         {LEVEL_ROWS.map(({ key, label }) => (
           <div key={key} className="flex items-center gap-3 text-sm">
@@ -61,12 +65,12 @@ export default function StatsPage() {
       </div>
 
       <Divider />
-      <div className="text-sm uppercase tracking-wide text-text-faint">Accuracy (30 days)</div>
+      <Label>Accuracy · 30 days</Label>
       {s.accuracy ? (
-        <div className="mt-2 flex justify-around text-sm">
-          <span>✅ {s.accuracy.correct}%</span>
-          <span>🐢 {s.accuracy.slow}%</span>
-          <span>❌ {s.accuracy.wrong}%</span>
+        <div className="mt-2 flex justify-around text-sm tabular-nums">
+          <span className="text-good">✓ {s.accuracy.correct}%</span>
+          <span className="text-slow">~ {s.accuracy.slow}%</span>
+          <span className="text-text-dim">✕ {s.accuracy.wrong}%</span>
         </div>
       ) : (
         <p className="mt-2 text-sm text-text-faint">No reviews yet.</p>
@@ -83,4 +87,12 @@ export default function StatsPage() {
 
 function Divider() {
   return <div className="my-4 h-px bg-border" />;
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+      {children}
+    </div>
+  );
 }
