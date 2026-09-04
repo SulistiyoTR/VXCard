@@ -92,6 +92,14 @@ export const IconSound = (p: SVGProps<SVGSVGElement>) => (
   </Svg>
 );
 
+/** Retry loop — a card reappearing after a wrong answer. */
+export const IconLoop = (p: SVGProps<SVGSVGElement>) => (
+  <Svg {...p}>
+    <path d="M4 12a8 8 0 1 1 2.7 6" />
+    <path d="M4 17v-5h5" />
+  </Svg>
+);
+
 export const IconSort = (p: SVGProps<SVGSVGElement>) => (
   <Svg {...p}>
     <path d="M8 4v16M8 4 5 7.5M8 4l3 3.5" />

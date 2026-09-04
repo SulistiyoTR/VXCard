@@ -14,6 +14,7 @@ import { WordPackage } from "@/components/WordPackage";
 import {
   IconCheck,
   IconClose,
+  IconLoop,
   IconPencil,
   IconPending,
   IconSlow,
@@ -36,6 +37,8 @@ function newSessionRow(planned: number, source: SessionRow["source"]): SessionRo
 interface Entry {
   item: SessionItem;
   question: Question;
+  /** Requeued after a wrong/dontknow answer earlier this session (SPEC 2.7). */
+  isRetry?: boolean;
 }
 
 interface Outcome {
@@ -191,7 +194,10 @@ export function SessionRunner({
       // Wrong words come back once at the end of the session (SPEC 2.7).
       if ((result === "wrong" || result === "dontknow") && !requeued.current.has(word.id)) {
         requeued.current.add(word.id);
-        setQueue((q) => [...q, { item: entry.item, question: buildQuestion(word, quizLevel(word.level), deck) }]);
+        setQueue((q) => [
+          ...q,
+          { item: entry.item, question: buildQuestion(word, quizLevel(word.level), deck), isRetry: true },
+        ]);
       }
     },
     [entry, hardMode, deck, patchWord, recordReview],
@@ -289,7 +295,7 @@ export function SessionRunner({
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-5 pt-4 safe-t">
-      <div className="flex items-center gap-3.5">
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-3.5 gap-y-1.5">
         <button
           onClick={() => setShowQuit(true)}
           className="text-xl leading-none text-text-dim"
@@ -297,7 +303,7 @@ export function SessionRunner({
         >
           <IconClose />
         </button>
-        <div className="h-[5px] flex-1 overflow-hidden border border-border bg-surface-2">
+        <div className="h-[5px] overflow-hidden border border-border bg-surface-2">
           <div
             className="h-full bg-text transition-[width] duration-[380ms] [transition-timing-function:var(--spring)]"
             style={{ width: `${(answered / planned) * 100}%` }}
@@ -306,6 +312,15 @@ export function SessionRunner({
         <span className="text-sm tabular-nums text-text-faint">
           {Math.min(answered + 1, planned)} / {planned}
         </span>
+
+        {phase === "question" && entry?.isRetry && (
+          <>
+            <span aria-hidden="true" />
+            <span className="col-start-2 inline-flex items-center gap-1 text-xs font-medium text-slow">
+              <IconLoop /> Previous mistake
+            </span>
+          </>
+        )}
       </div>
 
       {phase === "question" ? (
@@ -681,14 +696,12 @@ function CompleteView({
       )}
 
       <div className="mt-auto space-y-2 pt-8">
+        <Button onClick={onDone}>Done</Button>
         {canPractice && (
           <Button variant="secondary" onClick={onPractice}>
             Practice more
           </Button>
         )}
-        <Button variant="ghost" onClick={onDone}>
-          Done
-        </Button>
       </div>
     </div>
   );

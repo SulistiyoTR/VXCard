@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { daysBetween, today } from "@/lib/date";
 import { useLocalStorage } from "@/lib/useLocalStorage";
-import { Dots, PageTitle, Screen } from "@/components/ui";
-import { IconCheck, IconSort } from "@/components/icons";
+import { Dots, Screen } from "@/components/ui";
+import { IconCheck, IconPlus, IconSort } from "@/components/icons";
 
 interface Row {
   id: string;
@@ -76,7 +76,16 @@ export function WordsClient({ words }: { words: Row[] }) {
 
   return (
     <Screen>
-      <PageTitle right={String(words.length)}>My words</PageTitle>
+      <div className="flex items-baseline justify-between px-5 pt-6 pb-4">
+        <h1 className="font-serif text-[26px] font-bold tracking-[-0.005em]">My words</h1>
+        <Link
+          href="/add"
+          aria-label="Add word"
+          className="press -mr-2 flex h-10 w-10 items-center justify-center text-xl text-text-dim"
+        >
+          <IconPlus />
+        </Link>
+      </div>
 
       <div className="px-5">
         <input
