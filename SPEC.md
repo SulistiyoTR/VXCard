@@ -1,7 +1,13 @@
 # VX Card — Spec
 
 Aplikasi kartu kosakata bahasa Inggris dengan spaced repetition.
-Dipakai satu orang (single user), diakses lewat PWA di iPhone.
+Diakses lewat PWA di iPhone.
+
+**Arsitektur: shared content (multi-user).** Konten kata (`words`) milik bersama —
+sekali dibuat, dinikmati semua user. Yang personal cuma status belajar (`user_cards`).
+Detail migrasi ada di `UPDATE-PLAN.md`. Bagian 1.1, 1.4, 1.6, 5, dan 8 di bawah sudah
+mencerminkan arsitektur ini; bagian lain masih ditulis dengan asumsi single-user dan
+perlu dibaca dengan konteks itu.
 
 **Bahasa UI: Inggris.** Dokumen ini bahasa Indonesia, tapi semua teks yang tampil di app pakai bahasa Inggris.
 
@@ -15,9 +21,11 @@ Dipakai satu orang (single user), diakses lewat PWA di iPhone.
 | Sumber kata | App terpisah dari Kindle. Input manual satu per satu |
 | Metadata | Tidak menyimpan judul buku atau sumber |
 | Pembagian sumber data | **Fakta** (definisi, IPA, audio, POS, etimologi) dari dictionary API. **Bahasa** (kalimat contoh, distraktor) dari LLM |
-| Dictionary API | `dictionaryapi.dev` (gratis, tanpa key). Alternatif: Merriam-Webster Learner's |
+| Dictionary API | **Merriam-Webster Learner's Dictionary** — satu-satunya sumber, di-hardcode. Perlu key gratis (`MERRIAM_WEBSTER_KEY`), kuota 1000 req/hari **untuk seluruh app**. Tidak ada fallback: MW gagal / timeout / kuota habis → error jelas ke user |
+| Batas lookup | 50 lookup MW / hari / user (`DAILY_NEW_WORD_LIMIT`). Dihitung di titik panggil MW, sebelum request. Kata yang sudah ada di `words` = nol biaya, tidak dihitung |
 | Terjemahan Indonesia | **Tidak ada.** App full English |
-| Waktu generate | Sekali saat kartu dibuat, disimpan sebagai JSON. **Sesi quiz = nol API call** |
+| Waktu generate | Kamus dipanggil saat search. LLM (kalimat + distraktor) **ditunda sampai user tekan Save**. Setelah tersimpan, kontennya dipakai selamanya — **sesi quiz = nol API call** |
+| Konten bersama | Kata yang sudah pernah dibuat user lain → nambah kata instan, nol API call, nol LLM |
 | Quiz sinonim | Tidak dibuat |
 
 **Stack:** Next.js + Vercel (hosting) + Supabase (database + auth)
@@ -29,15 +37,42 @@ Dipakai satu orang (single user), diakses lewat PWA di iPhone.
 ### 1.1 Alur generate
 
 ```
-1. Normalisasi input (lowercase, trim)
-2. Cek duplikat di deck
-3. Panggil dictionary API
-4. Panggil LLM (2 panggilan terpisah)
-5. Simpan
-6. Tampilkan paket lengkap ke user
+1. Normalisasi input (lowercase, trim). Frasa (ada spasi) → tolak.
+2. Cek tabel `words` global:
+
+   a. Ada, status = complete
+      → Tampilkan pratinjau langsung. 0 API, 0 LLM. INSTAN.
+
+   b. Ada, status = dictionary_only
+      → Tampilkan pratinjau (fakta kamus saja, belum ada kalimat LLM). 0 API.
+
+   c. Belum ada
+      → Cek rate limit (mw_lookups). Lewat batas → tolak.
+      → Naikkan counter, panggil Merriam-Webster.
+      → Simpan hasil ke `words` dengan status dictionary_only.
+      → Tampilkan pratinjau.
+
+3. Cek juga: user ini sudah punya `user_cards` untuk kata ini?
+   → Kalau ya → tolak: "already in your deck" + tombol View.
+
+4. Save:
+   - status dictionary_only → panggil LLM (2 panggilan), append kalimat +
+     distraktor ke `words`, set status = complete.
+   - status complete → langsung.
+   - Semua kasus: buat satu baris `user_cards` (level 1, due besok).
+
+5. Cancel:
+   - Data kamus yang sudah tersimpan di `words` TIDAK dihapus. Nol biaya LLM.
 ```
 
-Blocking (~3-5 detik dengan spinner). Alasan: momen membaca paket lengkap adalah bagian dari proses belajar.
+Case (c) blocking (~1-2 detik, spinner) untuk lookup kamus. Save yang memicu LLM
+blocking (~3-5 detik). Momen membaca paket lengkap adalah bagian dari proses belajar.
+
+**Kenapa data kamus disimpan walau cancel:** supaya MW tidak pernah dipanggil dua kali
+untuk kata yang sama — kuotanya 1000/hari untuk seluruh app.
+
+**Pratinjau case (b)/(c) tidak punya kalimat LLM.** Tidak masalah — Learner's Dictionary
+hampir selalu punya contoh kalimatnya sendiri, dan kalimat quiz baru dibutuhkan di level 3.
 
 ### 1.2 Field dari dictionary API
 
@@ -71,47 +106,77 @@ Syarat output:
 - `distractor_defs` — 6 definisi palsu. Harus "nyaris benar": menyerempet kata lain yang mirip bentuknya. Contoh untuk *explicable*: "able to be excused or forgiven" (excusable), "capable of being expressed in words" (expressible), "understood without being stated" (implicit)
 - `distractor_words` — 6 kata dengan POS sama, tingkat kesulitan setara
 
-### 1.4 Struktur data per kata
+### 1.4 Struktur data
+
+Dipisah dua: **konten bersama** (`words`) dan **status belajar per user** (`user_cards`).
+
+**`words`** — shared, tanpa `user_id`, `word` unique global:
 
 ```json
 {
   "id": "uuid",
   "word": "explicable",
-  "created_at": "2026-09-02",
+  "created_at": "2026-09-02T...",
+  "updated_at": "2026-09-02T...",
 
   "phonetic": "/ɪkˈsplɪkəb(ə)l/",
   "audio_url": "https://...mp3",
   "pos": "adjective",
   "definition": "able to be accounted for or understood",
   "origin": "mid 16th cent.: from French, or from Latin explicabilis, from explicare",
-  "other_meanings": [
-    { "pos": "adjective", "definition": "..." }
-  ],
+  "other_meanings": [ { "pos": "adjective", "definition": "..." } ],
 
   "sentences": [
-    { "text": "...", "form": "explicable", "used_count": 0 },
-    { "text": "...", "form": "explicable", "used_count": 0 },
-    { "text": "...", "form": "explicable", "used_count": 0 },
-    { "text": "...", "form": "explicable", "used_count": 0 },
-    { "text": "...", "form": "explicable", "used_count": 0 }
+    { "text": "...", "form": "explicable", "hide_count": 0, "flagged": false }
   ],
-
-  "distractor_defs": ["...", "...", "...", "...", "...", "..."],
+  "distractor_defs":  ["...", "...", "...", "...", "...", "..."],
   "distractor_words": ["...", "...", "...", "...", "...", "..."],
 
+  "status": "complete",
+  "pool_full": false
+}
+```
+
+- `status`: `dictionary_only` (baru dari kamus, belum ada LLM) | `complete`.
+- `sentences` **append-only** — tidak pernah dihapus atau ditimpa, hanya ditambah di
+  belakang. Kalimat jelek ditandai `flagged`, bukan dibuang. Alasan: `user_cards.sentence_usage`
+  menunjuk ke array ini lewat **index** (§1.6).
+- `pool_full`: true kalau jumlah `sentences` sudah mencapai `MAX_SENTENCE_POOL` (15).
+- `updated_at` di-bump tiap konten berubah (append kalimat, `hide_count`, `flagged`,
+  `status`, `pool_full`) — dipakai sync untuk refresh cache di HP.
+- Distraktor tidak pernah di-regenerate — sekali seumur hidup kata.
+
+**`user_cards`** — satu baris per (user, word):
+
+```json
+{
+  "id": "uuid",
+  "user_id": "uuid",
+  "word_id": "uuid",
   "level": 1,
   "streak": 0,
   "due_date": "2026-09-03",
   "lapse_count": 0,
-  "last_seen_date": null
+  "last_seen_date": null,
+  "sentence_usage": [],
+  "hidden_sentences": [],
+  "created_at": "2026-09-02T...",
+  "updated_at": "2026-09-02T..."
 }
 ```
 
-Riwayat review disimpan terpisah:
+- `sentence_usage`: array int, sejajar index `words.sentences`. Naik saat kalimat
+  **ditampilkan** ke user ini. Kalau lebih pendek dari `sentences` (pool baru tumbuh),
+  index yang belum ada dianggap 0.
+- `hidden_sentences`: array index yang disembunyikan user ini lewat "Change this sentence".
+- Unique `(user_id, word_id)`.
+
+Riwayat review disimpan terpisah — kolom `word_id` + `user_id` langsung, tanpa FK ke `user_cards`:
 
 ```json
 {
   "word_id": "uuid",
+  "user_id": "uuid",
   "reviewed_at": "2026-09-02T14:30:00Z",
   "level": 3,
   "result": "slow",
@@ -134,16 +199,46 @@ Riwayat review disimpan terpisah:
 | Frasa (ada spasi) | Tolak — "Only single words for now" |
 | Offline / API down | Tolak — "No connection. Try again later." Tidak ada antrian pending |
 
-### 1.6 Regenerate kalimat
+### 1.6 Kalimat contoh — rotasi, hide, auto-grow
 
-| Tombol | Lokasi | Syarat | Aksi |
-|---|---|---|---|
-| ✎ (per kalimat) | Layar feedback + Word Detail | Selalu ada | Ganti 1 kalimat, `used_count` reset 0 |
-| Refresh sentences | Stats | Ada kalimat `used_count >= 3` | Generate ulang 5 kalimat untuk semua kata yang memenuhi syarat |
+Kalimat **tidak pernah dihapus atau ditimpa**, hanya ditambah di belakang array
+`words.sentences`. Tidak ada tombol regenerate manual (per-kalimat maupun borongan).
 
-Tombol borongan: konfirmasi dulu ("42 words will be refreshed"), jalan di background dengan progress bar, batas maksimum 50 kata per eksekusi. Sembunyikan tombol kalau tidak ada yang memenuhi syarat.
+**Tiga angka** (per user, dihitung dari `words.sentences` + `user_cards`):
 
-**Rotasi kalimat:** pilih yang `used_count` terkecil. Kalau seri, acak. `used_count` naik saat kalimat **ditampilkan**, bukan saat dijawab.
+```
+available = index dimana !sentences[i].flagged
+                     AND i tidak ada di user_cards.hidden_sentences
+fresh     = available.filter(i => usage(i) === 0)     // belum pernah dilihat user ini
+poolSize  = sentences.filter(s => !s.flagged).length  // ukuran pool aktif (global)
+```
+
+`usage(i)` = `user_cards.sentence_usage[i] ?? 0`.
+
+**Rotasi:** dari `available`, pilih index dengan `usage` terkecil. Kalau seri, acak.
+`usage` naik saat kalimat **ditampilkan**, bukan saat dijawab.
+
+**Tombol ✎ "Change this sentence"** (layar feedback + Word detail) — untuk kalimat
+**jelek**, bukan kalimat bosan. Tidak memanggil LLM:
+
+```
+1. Tambah index ke user_cards.hidden_sentences   (efek untuk user ini saja)
+2. words.sentences[i].hide_count += 1             (sinyal global)
+3. Kalau hide_count >= FLAG_THRESHOLD (3) → sentences[i].flagged = true
+```
+
+User lain tidak terpengaruh sampai 3 orang berbeda setuju kalimat itu jelek.
+
+**Auto-grow (sistem tiket).** Pool tumbuh otomatis di background setelah sesi quiz
+selesai. Syarat generate — **keduanya** harus terpenuhi untuk suatu kata:
+
+1. ada user dengan `fresh < FRESH_THRESHOLD` (3)
+2. `poolSize < MAX_SENTENCE_POOL` (15)
+
+`pool_full = true` → lewati pengecekan sepenuhnya. Pertumbuhan `SENTENCE_BATCH` (5)
+sekaligus: 5 → 10 → 15. Anti-conflict lewat tabel `sentence_requests` (`word_id` unique
++ `FOR UPDATE SKIP LOCKED` + timeout `TICKET_TIMEOUT_MINUTES`). Detail alur ada di
+`UPDATE-PLAN.md` Sesi 5.
 
 ---
 
@@ -689,36 +784,58 @@ Tombol mati tetap ditampilkan (redup), jangan disembunyikan.
 
 ## 5. Database
 
-### 5.1 Tabel `words`
+Enam tabel: `words`, `user_cards`, `reviews`, `sessions`, `sentence_requests`,
+`mw_lookups`. Plus `push_subscriptions` (§6.3, tidak berubah). Migrasi dari schema
+lama ada di `UPDATE-PLAN.md`. `words` shared (tanpa `user_id`); sisanya per-user.
+
+### 5.1 Tabel `words` — konten bersama
 
 | Kolom | Tipe | Catatan |
 |---|---|---|
 | `id` | uuid | PK |
-| `user_id` | uuid | FK ke `auth.users` |
-| `word` | text | unique per user |
+| `word` | text | **unique global** |
 | `created_at` | timestamptz | |
+| `updated_at` | timestamptz | di-bump tiap konten berubah; dipakai sync |
 | `phonetic` | text | nullable |
 | `audio_url` | text | nullable |
 | `pos` | text | |
 | `definition` | text | |
 | `origin` | text | nullable |
-| `other_meanings` | jsonb | array |
-| `sentences` | jsonb | array of `{text, form, used_count}` |
-| `distractor_defs` | jsonb | array of 6 |
-| `distractor_words` | jsonb | array of 6 |
+| `other_meanings` | jsonb | array of `{pos, definition}` |
+| `sentences` | jsonb | array of `{text, form, hide_count, flagged}` — **append-only** |
+| `distractor_defs` | jsonb | array of 6, nullable sampai status = complete |
+| `distractor_words` | jsonb | array of 6, nullable sampai status = complete |
+| `status` | text | `dictionary_only` \| `complete` |
+| `pool_full` | boolean | true kalau `sentences` sudah `MAX_SENTENCE_POOL` |
+
+Tidak ada kolom `source` — cuma satu sumber kamus (Merriam-Webster).
+
+### 5.2 Tabel `user_cards` — status belajar per user
+
+| Kolom | Tipe | Catatan |
+|---|---|---|
+| `id` | uuid | PK |
+| `user_id` | uuid | FK `auth.users` |
+| `word_id` | uuid | FK `words` |
 | `level` | int | 1–4, **5 = lulus** |
 | `streak` | int | |
 | `due_date` | date | **diindeks** |
 | `lapse_count` | int | |
 | `last_seen_date` | date | anti-duplikat dalam sesi |
+| `sentence_usage` | jsonb | array int, sejajar index `words.sentences` |
+| `hidden_sentences` | jsonb | array index yang disembunyikan user ini |
+| `created_at` | timestamptz | |
+| `updated_at` | timestamptz | drives LWW sync |
 
-### 5.2 Tabel `reviews`
+Unique `(user_id, word_id)`.
+
+### 5.3 Tabel `reviews`
 
 | Kolom | Tipe |
 |---|---|
 | `id` | uuid |
 | `user_id` | uuid |
-| `word_id` | uuid FK |
+| `word_id` | uuid — **langsung, tanpa FK ke `user_cards`** |
 | `reviewed_at` | timestamptz |
 | `level` | int |
 | `result` | text |
@@ -726,66 +843,81 @@ Tombol mati tetap ditampilkan (redup), jangan disembunyikan.
 | `help_used` | int |
 | `source` | text |
 
-### 5.3 Kenapa jsonb, bukan tabel terpisah
+### 5.4 Tabel `sessions`
 
-`sentences`, `distractor_defs`, `distractor_words` selalu dibaca bersama kata-nya, tidak pernah di-query lintas kata, dan jumlahnya tetap dan kecil. Memecah jadi tabel terpisah hanya menambah join tanpa manfaat.
+Untuk perhitungan streak (§4.7 — sesi harus habis sampai soal terakhir).
+Kolom: `id`, `user_id`, `started_at`, `finished_at`, `completed` (bool),
+`planned` (int), `answered` (int), `source` (`review` \| `practice` \| `hardmode` \| `mixed`),
+`updated_at`.
 
-Konsekuensi: update `used_count` harus baca-ubah-tulis seluruh array. Untuk single-user ini tidak masalah.
+### 5.5 Tabel `sentence_requests` — antrian tiket auto-generate
 
-### 5.4 Index
+| Kolom | Tipe | Catatan |
+|---|---|---|
+| `word_id` | uuid | **UNIQUE** — lapis anti-conflict pertama |
+| `created_at` | timestamptz | |
+| `locked_at` | timestamptz | nullable — kapan tiket diambil worker |
+
+Diambil dengan `SELECT ... FOR UPDATE SKIP LOCKED` (Postgres function via `supabase.rpc()`).
+`locked_at` lewat `TICKET_TIMEOUT_MINUTES` → dianggap nganggur lagi. Detail alur:
+`UPDATE-PLAN.md` Sesi 5.
+
+### 5.6 Tabel `mw_lookups` — counter rate limit
+
+| Kolom | Tipe |
+|---|---|
+| `user_id` | uuid |
+| `day` | date |
+| `count` | int |
+
+PK gabungan `(user_id, day)`. Di-`upsert` dengan increment **tepat sebelum** tiap
+panggilan Merriam-Webster (request gagal/timeout tetap makan kuota MW). Endpoint generate
+menolak kalau `count >= DAILY_NEW_WORD_LIMIT` sebelum lookup.
+
+### 5.7 Kenapa jsonb untuk `sentences` / distraktor
+
+Selalu dibaca bersama kata-nya, tidak pernah di-query lintas kata, jumlahnya kecil dan
+ber-cap. `sentence_usage` / `hidden_sentences` juga jsonb — array index pendek, selalu
+dibaca bersama kartunya. Konsekuensi: update array itu baca-ubah-tulis; volumenya kecil,
+tidak masalah.
+
+### 5.8 Index
 
 ```sql
-CREATE INDEX idx_words_due ON words(user_id, due_date);
-CREATE INDEX idx_reviews_word ON reviews(word_id);
+CREATE INDEX idx_user_cards_due ON user_cards(user_id, due_date);
+CREATE INDEX idx_reviews_word   ON reviews(word_id);
+CREATE UNIQUE INDEX idx_words_word ON words(word);
+CREATE UNIQUE INDEX idx_sentence_requests_word ON sentence_requests(word_id);
 ```
 
-### 5.5 Query pemilihan sesi
+### 5.9 Query pemilihan sesi
 
-```sql
--- 1. Kandidat due
-SELECT * FROM words
-WHERE user_id = :uid
-  AND due_date <= CURRENT_DATE
-ORDER BY due_date ASC
-LIMIT :jumlah_due * 1.5;
--- lalu acak di aplikasi, ambil :jumlah_due
-```
+Kandidat due dan random di-join `user_cards → words`, difilter `user_cards.user_id = :uid`.
+Kandidat due: `due_date <= CURRENT_DATE`, `ORDER BY due_date ASC`, `LIMIT :jumlah_due * 1.5`,
+lalu diacak di aplikasi. Random: acak dari semua kartu user dikurangi yang sudah terpilih.
+Distraktor level 3-4: kata lain di deck user dengan `words.pos` sama.
 
-```sql
--- 2. Random
-SELECT * FROM words
-WHERE user_id = :uid
-  AND id NOT IN (:sudah_terpilih)
-ORDER BY RANDOM()
-LIMIT :jumlah_random;
-```
+Pengacakan pool due dilakukan **di aplikasi**, bukan SQL. **Seluruh sesi ditarik sekaligus
+di awal**, tidak per soal. Hasil jawaban (reviews + patch `user_cards`) dikirim ke server
+di background lewat outbox sync; kalau gagal, tumpuk dan coba lagi.
 
-```sql
--- 3. Distraktor dari deck (level 3-4)
-SELECT word FROM words
-WHERE user_id = :uid
-  AND pos = :pos
-  AND id != :current_word_id
-ORDER BY RANDOM()
-LIMIT 3;
-```
-
-Pengacakan pool due dilakukan **di aplikasi**, bukan SQL — hasilnya sudah kecil (18 baris), dan `ORDER BY RANDOM()` lambat di tabel besar.
-
-**Seluruh sesi ditarik sekaligus di awal**, tidak per soal. Hasil jawaban dikirim ke server di background (non-blocking). Kalau gagal, tumpuk dan coba lagi.
-
-### 5.6 Auth
+### 5.10 Auth & RLS
 
 **Supabase Auth dengan Google login.**
 
-Aktifkan Row Level Security di kedua tabel:
+| Tabel | Aturan RLS |
+|---|---|
+| `words` | Semua user login boleh **SELECT**. Tulis lewat backend saja (service-role) |
+| `user_cards` | `auth.uid() = user_id` |
+| `reviews` | `auth.uid() = user_id` |
+| `sessions` | `auth.uid() = user_id` |
+| `sentence_requests` | Tidak diakses dari client — backend saja |
+| `mw_lookups` | Tidak diakses dari client — backend saja |
 
-```sql
-CREATE POLICY "own rows" ON words
-  FOR ALL USING (auth.uid() = user_id);
-```
-
-**Rate limit di endpoint generate: maksimum 50 kata baru per hari.** Ini pengaman terhadap bug/loop, bukan terhadap orang asing.
+**Rate limit lookup MW: `DAILY_NEW_WORD_LIMIT` (50) per hari per user**, dicek lewat
+`mw_lookups` sebelum tiap panggilan MW. Kata yang sudah ada di `words` tidak menembak MW
+sehingga tidak dihitung. Ini pengaman dompet + kuota MW app-wide (1000/hari), bukan
+sekadar pengaman bug.
 
 ---
 
@@ -901,16 +1033,25 @@ export const CONFIG = {
   POOL_MULTIPLIER:  1.5,
   HARD_MODE_MIN:    10,
   HARD_MODE_MAX_DEMOTION: 2,
-  SENTENCES_PER_WORD: 5,
+  SENTENCES_PER_WORD: 5,       // batch generate awal saat Save
   DISTRACTORS_PER_WORD: 6,
   HINT_COUNT:       2,
   HINT_COUNT_SHORT: 1,
   SHORT_WORD_LEN:   6,
-  REFRESH_THRESHOLD: 3,
-  REFRESH_BATCH_MAX: 50,
-  DAILY_NEW_WORD_LIMIT: 50,
+  DAILY_NEW_WORD_LIMIT: 50,    // cap lookup MW / hari / user
+
+  // Pool kalimat shared + sistem tiket (§1.6, UPDATE-PLAN Sesi 4-5)
+  MAX_SENTENCE_POOL:       15, // cap keras jumlah kalimat per kata
+  SENTENCE_BATCH:          5,  // tambah 5 sekaligus: 5 → 10 → 15
+  FRESH_THRESHOLD:         3,  // user dengan fresh < ini → nitip tiket
+  FLAG_THRESHOLD:          3,  // hide oleh N user berbeda → flagged global
+  TICKET_TIMEOUT_MINUTES:  2,  // tiket ter-lock lebih lama → nganggur lagi
+  MAX_TICKETS_PER_SESSION: 3,  // batas kerja tiket per eksekusi worker
 };
 ```
+
+`REFRESH_THRESHOLD` / `REFRESH_BATCH_MAX` dihapus — tombol refresh manual sudah
+digantikan auto-grow lewat sistem tiket (§1.6).
 
 Catatan kalibrasi:
 - `SLOW_THRESHOLD` — setel setelah lihat distribusi durasi asli di tabel `reviews`
