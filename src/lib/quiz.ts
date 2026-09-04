@@ -1,5 +1,6 @@
 import { CONFIG } from "./config";
 import { pick, shuffle, type Rng } from "./random";
+import { availableIndices } from "./sentencePool";
 import type { Sentence, Word } from "./types";
 
 export type QuizLevel = 1 | 2 | 3 | 4;
@@ -36,16 +37,13 @@ export function pickSentence(
   rng: Rng = Math.random,
 ): { sentence: Sentence; index: number } | null {
   if (sentences.length === 0) return null;
-  const hiddenSet = new Set(hidden);
-  const available = sentences
-    .map((s, i) => ({ s, i }))
-    .filter(({ s, i }) => !s.flagged && !hiddenSet.has(i));
-  const pool = available.length > 0 ? available : sentences.map((s, i) => ({ s, i }));
+  const avail = availableIndices(sentences, hidden);
+  const pool = avail.length > 0 ? avail : sentences.map((_, i) => i);
   const use = (i: number) => usage[i] ?? 0;
-  const min = Math.min(...pool.map(({ i }) => use(i)));
-  const candidates = pool.filter(({ i }) => use(i) === min);
-  const chosen = candidates[Math.floor(rng() * candidates.length)];
-  return { sentence: chosen.s, index: chosen.i };
+  const min = Math.min(...pool.map(use));
+  const candidates = pool.filter((i) => use(i) === min);
+  const index = candidates[Math.floor(rng() * candidates.length)];
+  return { sentence: sentences[index], index };
 }
 
 function blank(text: string, form: string): string {

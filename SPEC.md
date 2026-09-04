@@ -92,7 +92,7 @@ Model: **Claude Haiku**. Temperature 0.3. Output JSON murni. API key **wajib di 
 
 Dua panggilan **terpisah**:
 
-**Panggilan A — 5 kalimat contoh** (bisa di-regenerate)
+**Panggilan A — 5 kalimat contoh** (pool tumbuh otomatis lewat sistem tiket, §1.6)
 
 Input: word, pos, definition
 Syarat output:
@@ -725,12 +725,10 @@ L4  ▓▓▓▓            32
 ─────────────────────
 Accuracy (30 days)
 ✅ 68%   🐢 21%   ❌ 11%
-─────────────────────
-[ Refresh sentences  ]
-[ 12 words ready     ]
 ```
 
 Muat dalam satu layar tanpa scroll. Kalender dipisah ke layar sendiri.
+Tidak ada tombol "Refresh sentences" — pool kalimat tumbuh otomatis (§1.6).
 
 **Tidak ada di V0:** badge/achievement, grafik jumlah soal per hari, total waktu belajar.
 
@@ -970,7 +968,7 @@ Manual: **Safari → Share → Add to Home Screen.** Harus dari Safari, bukan da
 | Server | Cadangan + sinkronisasi |
 | Konflik | Last-write-wins (bandingkan timestamp) |
 | Jalan offline | Main (Review, Hard Mode, Practice), My words, Stats, Calendar |
-| Butuh koneksi | Add word, Refresh sentences, sinkronisasi |
+| Butuh koneksi | Add word, sinkronisasi. "Change this sentence" hide lokal jalan offline; bump `hide_count` global ikut outbox |
 
 Ukuran deck 1000 kata ≈ 2-3 MB, tidak masalah untuk IndexedDB.
 

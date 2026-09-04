@@ -8,6 +8,7 @@ import {
   bumpSentenceUsageLocal,
   deleteCardLocal,
   enqueueReview,
+  hideSentenceLocal,
   isSeeded,
   loadDeck,
   loadReviews,
@@ -31,6 +32,8 @@ export interface AppData {
   removeWord: (id: string) => Promise<void>;
   /** Bump `sentence_usage[index]` when a level 3/4 sentence is shown (SPEC 1.6). */
   bumpSentenceUsage: (wordId: string, index: number) => Promise<void>;
+  /** "Change this sentence": hide it for this user + queue the global hide_count bump. */
+  hideSentence: (wordId: string, index: number) => Promise<void>;
   recordReview: (review: Review) => Promise<void>;
   upsertSession: (session: SessionRow) => Promise<void>;
 }
@@ -144,6 +147,15 @@ export function AppDataProvider({
     [refresh],
   );
 
+  const hideSentence = useCallback(
+    async (wordId: string, index: number) => {
+      await hideSentenceLocal(wordId, index);
+      await reload();
+      void refresh();
+    },
+    [reload, refresh],
+  );
+
   const recordReview = useCallback(async (review: Review) => {
     await enqueueReview(review);
     setReviews(await loadReviews());
@@ -172,6 +184,7 @@ export function AppDataProvider({
         patchWord,
         removeWord,
         bumpSentenceUsage,
+        hideSentence,
         recordReview,
         upsertSession,
       }}

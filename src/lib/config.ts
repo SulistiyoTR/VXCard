@@ -29,6 +29,18 @@ export const CONFIG = {
   FLAG_THRESHOLD: 3,
   /** Per-user daily Merriam-Webster lookup cap (SPEC 0 / 5.10). */
   DAILY_NEW_WORD_LIMIT: 50,
+
+  // Sentence pool auto-grow — ticket system (SPEC 1.6, UPDATE-PLAN Sesi 5)
+  /** Hard cap on sentences per word. */
+  MAX_SENTENCE_POOL: 15,
+  /** Sentences generated per ticket: 5 → 10 → 15. */
+  SENTENCE_BATCH: 5,
+  /** A user with fewer than this many unseen sentences triggers a ticket. */
+  FRESH_THRESHOLD: 3,
+  /** A claimed ticket older than this (minutes) is considered idle again. */
+  TICKET_TIMEOUT_MINUTES: 2,
+  /** Tickets worked per background run. */
+  MAX_TICKETS_PER_SESSION: 3,
 } as const;
 
 export type Config = typeof CONFIG;
