@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { CONFIG } from "@/lib/config";
 import {
   cardRowToCard,
   contentRowToContent,
@@ -6,6 +7,7 @@ import {
   type UserCardRow,
   type WordContentRow,
 } from "@/lib/data";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Review, SessionRow, UserCard } from "@/lib/types";
 
@@ -69,6 +71,8 @@ interface PushBody {
   sessions?: SessionRow[];
   /** `word_id`s of removed cards. */
   deletions?: string[];
+  /** "Change this sentence" global hide_count bumps. */
+  hides?: { word_id: string; index: number }[];
 }
 
 /**
@@ -91,6 +95,20 @@ export async function POST(request: Request) {
   const cards = body.cards ?? [];
   const sessions = body.sessions ?? [];
   const deletions = body.deletions ?? [];
+  const hides = body.hides ?? [];
+
+  // Global hide_count bumps — service-role (shared `words` is backend-write-only).
+  if (hides.length) {
+    const admin = createAdminClient();
+    for (const h of hides) {
+      if (typeof h?.word_id !== "string" || !Number.isInteger(h?.index) || h.index < 0) continue;
+      await admin.rpc("hide_sentence", {
+        p_word_id: h.word_id,
+        p_index: h.index,
+        p_flag_threshold: CONFIG.FLAG_THRESHOLD,
+      });
+    }
+  }
 
   if (deletions.length) {
     await supabase

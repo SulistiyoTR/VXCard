@@ -11,7 +11,7 @@ import { Speak } from "@/components/Speak";
 
 export function WordDetailClient({ word }: { word: Word }) {
   const router = useRouter();
-  const { patchWord, removeWord, online } = useAppData();
+  const { patchWord, removeWord, hideSentence } = useAppData();
   const [menu, setMenu] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -28,20 +28,11 @@ export function WordDetailClient({ word }: { word: Word }) {
     .filter(({ s, idx }) => !s.flagged && !word.hidden_sentences.includes(idx));
   const visible = showAll ? available : available.slice(0, 2);
 
-  // "Change this sentence" (SPEC 1.6): hide for this user + bump global hide_count.
+  // "Change this sentence" (SPEC 1.6): hide for this user + queue the global bump.
   async function hide(idx: number) {
     setBusyIdx(idx);
     try {
-      await patchWord(word.id, {
-        hidden_sentences: [...word.hidden_sentences, idx],
-      });
-      if (online) {
-        await fetch("/api/sentence/hide", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ word_id: word.id, index: idx }),
-        }).catch(() => {});
-      }
+      await hideSentence(word.id, idx);
     } finally {
       setBusyIdx(null);
     }

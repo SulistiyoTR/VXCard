@@ -66,7 +66,8 @@ export async function push(): Promise<void> {
     outbox.reviews.length === 0 &&
     outbox.cards.length === 0 &&
     outbox.sessions.length === 0 &&
-    outbox.deletions.length === 0
+    outbox.deletions.length === 0 &&
+    outbox.hides.length === 0
   ) {
     return;
   }
@@ -83,6 +84,7 @@ export async function push(): Promise<void> {
     cardWordIds: outbox.cards.map((c) => c.word_id),
     sessionIds: outbox.sessions.map((s) => s.id),
     deletions: outbox.deletions,
+    hides: outbox.hides,
   });
 }
 

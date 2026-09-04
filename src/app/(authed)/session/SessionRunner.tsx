@@ -76,6 +76,7 @@ export function SessionRunner({
   const demotionsRef = useRef(0);
   const requeued = useRef<Set<string>>(new Set());
   const usageBumped = useRef<Set<number>>(new Set());
+  const ticketsRan = useRef(false);
 
   const entry = queue[pos];
 
@@ -88,6 +89,29 @@ export function SessionRunner({
     usageBumped.current.add(pos);
     void bumpSentenceUsage(entry.item.word.id, idx);
   }, [pos, phase, entry, bumpSentenceUsage]);
+
+  // After the results screen renders, kick the sentence-pool ticket system in
+  // the background (SPEC 1.6 / UPDATE-PLAN Sesi 5). Fire-and-forget — the
+  // results screen never waits on it.
+  useEffect(() => {
+    if (phase !== "done" || ticketsRan.current) return;
+    ticketsRan.current = true;
+    // Words whose sentence pool was actually touched this session — i.e. a cloze
+    // question was built for them (levels 3-4, or Hard Mode).
+    const wordIds = [
+      ...new Set(
+        outcomes
+          .filter((o) => o.entry.question.sentenceIndex != null)
+          .map((o) => o.entry.item.word.id),
+      ),
+    ];
+    if (wordIds.length === 0) return;
+    void fetch("/api/tickets/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ word_ids: wordIds }),
+    }).catch(() => {});
+  }, [phase, outcomes]);
 
   const persistSession = useCallback(
     (answered: number, completed: boolean) => {
@@ -235,6 +259,7 @@ export function SessionRunner({
     demotionsRef.current = 0;
     requeued.current = new Set();
     usageBumped.current = new Set();
+    ticketsRan.current = false;
     startRef.current = Date.now();
     setPhase("question");
   }
@@ -476,7 +501,7 @@ function FeedbackView({
   onContinue: () => void;
 }) {
   const word = outcome.entry.item.word;
-  const { patchWord, online } = useAppData();
+  const { hideSentence } = useAppData();
   const [hidden, setHidden] = useState(false);
   const [busy, setBusy] = useState(false);
   const line = topLine(outcome);
@@ -488,23 +513,14 @@ function FeedbackView({
   const days = daysBetween(today(), outcome.newState.due_date);
   const dueLabel = days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
 
-  // "Change this sentence" (SPEC 1.6): hide it for this user + bump the global
-  // hide_count. The sentence pool is append-only — nothing is regenerated.
+  // "Change this sentence" (SPEC 1.6): hide for this user + queue the global
+  // hide_count bump. The pool is append-only — nothing is regenerated.
   async function changeSentence() {
     if (!shown || hidden) return;
     setBusy(true);
     try {
-      await patchWord(word.id, {
-        hidden_sentences: [...word.hidden_sentences, shownIndex],
-      });
+      await hideSentence(word.id, shownIndex);
       setHidden(true);
-      if (online) {
-        await fetch("/api/sentence/hide", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ word_id: word.id, index: shownIndex }),
-        }).catch(() => {});
-      }
     } finally {
       setBusy(false);
     }
