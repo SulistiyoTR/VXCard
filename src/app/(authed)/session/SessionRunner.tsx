@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { regenerateSentence } from "@/lib/actions";
 import { CONFIG } from "@/lib/config";
 import { daysBetween, today } from "@/lib/date";
 import { buildQuestion, hintBudget, hintMask, matchTyped, nextHintPosition, quizLevel, type Question } from "@/lib/quiz";
@@ -55,7 +54,7 @@ export function SessionRunner({
   hardMode: boolean;
 }) {
   const router = useRouter();
-  const { patchWord, recordReview, upsertSession } = useAppData();
+  const { patchWord, recordReview, upsertSession, bumpSentenceUsage } = useAppData();
   const planned = initialEntries.length;
 
   const sessionRef = useRef<SessionRow>(
@@ -76,8 +75,19 @@ export function SessionRunner({
   }, [upsertSession]);
   const demotionsRef = useRef(0);
   const requeued = useRef<Set<string>>(new Set());
+  const usageBumped = useRef<Set<number>>(new Set());
 
   const entry = queue[pos];
+
+  // `sentence_usage` goes up when a level 3/4 sentence is *shown* (SPEC 1.6),
+  // not when it's answered — so this fires once per queue position.
+  useEffect(() => {
+    if (phase !== "question" || !entry) return;
+    const idx = entry.question.sentenceIndex;
+    if (idx == null || usageBumped.current.has(pos)) return;
+    usageBumped.current.add(pos);
+    void bumpSentenceUsage(entry.item.word.id, idx);
+  }, [pos, phase, entry, bumpSentenceUsage]);
 
   const persistSession = useCallback(
     (answered: number, completed: boolean) => {
@@ -224,6 +234,7 @@ export function SessionRunner({
     setQuitEarly(false);
     demotionsRef.current = 0;
     requeued.current = new Set();
+    usageBumped.current = new Set();
     startRef.current = Date.now();
     setPhase("question");
   }
@@ -466,31 +477,36 @@ function FeedbackView({
 }) {
   const word = outcome.entry.item.word;
   const { patchWord, online } = useAppData();
-  const [sentences, setSentences] = useState(word.sentences);
-  const [regenerating, setRegenerating] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [busy, setBusy] = useState(false);
   const line = topLine(outcome);
 
   const shownIndex = outcome.entry.question.sentenceIndex ?? 0;
-  const shownSentence = sentences[shownIndex] ? [sentences[shownIndex]] : sentences.slice(0, 1);
+  const shown = word.sentences[shownIndex];
+  const shownSentence = shown ? [shown] : word.sentences.slice(0, 1);
 
   const days = daysBetween(today(), outcome.newState.due_date);
   const dueLabel = days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
 
+  // "Change this sentence" (SPEC 1.6): hide it for this user + bump the global
+  // hide_count. The sentence pool is append-only — nothing is regenerated.
   async function changeSentence() {
-    setRegenerating(true);
+    if (!shown || hidden) return;
+    setBusy(true);
     try {
-      const fresh = await regenerateSentence({
-        word: word.word,
-        pos: word.pos,
-        definition: word.definition,
+      await patchWord(word.id, {
+        hidden_sentences: [...word.hidden_sentences, shownIndex],
       });
-      const updated = sentences.map((x, i) => (i === shownIndex ? fresh : x));
-      setSentences(updated);
-      await patchWord(word.id, { sentences: updated });
-    } catch {
-      /* ignore */
+      setHidden(true);
+      if (online) {
+        await fetch("/api/sentence/hide", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ word_id: word.id, index: shownIndex }),
+        }).catch(() => {});
+      }
     } finally {
-      setRegenerating(false);
+      setBusy(false);
     }
   }
 
@@ -527,14 +543,20 @@ function FeedbackView({
         <LevelIndicator oldLevel={outcome.oldLevel} newState={outcome.newState} />
         {!hardMode && <span className="text-text-dim">{dueLabel}</span>}
       </div>
-      <button
-        onClick={changeSentence}
-        disabled={regenerating || !online}
-        title={online ? undefined : "Needs a connection"}
-        className="mt-2 self-end text-[12.5px] text-accent disabled:opacity-40"
-      >
-        {regenerating ? "…" : "✎ change sentence"}
-      </button>
+      {shown &&
+        (hidden ? (
+          <span className="mt-2 self-end text-[12.5px] text-text-faint">
+            Hidden — you won&rsquo;t see this one again
+          </span>
+        ) : (
+          <button
+            onClick={changeSentence}
+            disabled={busy}
+            className="mt-2 self-end text-[12.5px] text-accent disabled:opacity-40"
+          >
+            {busy ? "…" : "✎ change sentence"}
+          </button>
+        ))}
 
       <div className="mt-auto pt-6 safe-b">
         <Button onClick={onContinue}>Continue →</Button>

@@ -75,6 +75,18 @@ describe("pickSentence (SPEC 1.6 rotation)", () => {
   it("returns null with no sentences", () => {
     expect(pickSentence([], [], [], seededRng(1))).toBeNull();
   });
+
+  it("does not repeat a sentence until every one has been shown", () => {
+    const sentences = [s("a"), s("b"), s("c")];
+    const usage = [0, 0, 0];
+    const seen: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const idx = pickSentence(sentences, usage, [], seededRng(i + 1))!.index;
+      seen.push(idx);
+      usage[idx] += 1;
+    }
+    expect([...seen].sort()).toEqual([0, 1, 2]);
+  });
 });
 
 describe("matchTyped (SPEC 2.6 fuzzy)", () => {

@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
-import { regenerateSentence } from "@/lib/actions";
 import { addDays, daysBetween, today } from "@/lib/date";
 import { useAppData } from "@/lib/store/provider";
 import type { Word } from "@/lib/types";
@@ -22,18 +21,27 @@ export function WordDetailClient({ word }: { word: Word }) {
 
   const days = daysBetween(today(), word.due_date);
   const nextLabel = days <= 0 ? "now" : days === 1 ? "tomorrow" : `in ${days} days`;
-  const visible = showAll ? word.sentences : word.sentences.slice(0, 2);
 
-  async function regen(i: number) {
-    setBusyIdx(i);
+  // Sentences this user still sees: not flagged out globally, not hidden by them.
+  const available = word.sentences
+    .map((s, idx) => ({ s, idx }))
+    .filter(({ s, idx }) => !s.flagged && !word.hidden_sentences.includes(idx));
+  const visible = showAll ? available : available.slice(0, 2);
+
+  // "Change this sentence" (SPEC 1.6): hide for this user + bump global hide_count.
+  async function hide(idx: number) {
+    setBusyIdx(idx);
     try {
-      const fresh = await regenerateSentence({
-        word: word.word,
-        pos: word.pos,
-        definition: word.definition,
+      await patchWord(word.id, {
+        hidden_sentences: [...word.hidden_sentences, idx],
       });
-      const sentences = word.sentences.map((x, idx) => (idx === i ? fresh : x));
-      await patchWord(word.id, { sentences });
+      if (online) {
+        await fetch("/api/sentence/hide", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ word_id: word.id, index: idx }),
+        }).catch(() => {});
+      }
     } finally {
       setBusyIdx(null);
     }
@@ -120,23 +128,24 @@ export function WordDetailClient({ word }: { word: Word }) {
       <div className="my-5 h-px bg-border" />
       <div className="text-sm uppercase tracking-wide text-text-faint">Examples</div>
       <ul className="mt-2 space-y-3">
-        {visible.map((s, i) => (
-          <li key={i} className="flex items-start justify-between gap-3">
+        {visible.map(({ s, idx }) => (
+          <li key={idx} className="flex items-start justify-between gap-3">
             <span className="italic text-text-dim">&ldquo;{s.text}&rdquo;</span>
             <button
-              onClick={() => regen(i)}
-              disabled={busyIdx === i || !online}
-              title={online ? "Regenerate" : "Needs a connection"}
+              onClick={() => hide(idx)}
+              disabled={busyIdx === idx}
+              title="Hide this sentence"
               className="shrink-0 text-accent disabled:opacity-30"
             >
-              {busyIdx === i ? "…" : "✎"}
+              {busyIdx === idx ? "…" : "✎"}
             </button>
           </li>
         ))}
+        {visible.length === 0 && <li className="text-sm text-text-faint">No example sentences.</li>}
       </ul>
-      {word.sentences.length > 2 && !showAll && (
+      {available.length > 2 && !showAll && (
         <button className="mt-2 text-sm text-accent" onClick={() => setShowAll(true)}>
-          (+{word.sentences.length - 2} more)
+          (+{available.length - 2} more)
         </button>
       )}
 

@@ -25,10 +25,9 @@ export const CONFIG = {
   HINT_COUNT_SHORT: 1,
   /** Words shorter than this get only one hint (SPEC 2.6). */
   SHORT_WORD_LEN: 6,
-  /** A sentence used this many times becomes eligible for refresh (SPEC 1.6). */
-  REFRESH_THRESHOLD: 3,
-  REFRESH_BATCH_MAX: 50,
-  /** Safety cap against generate loops/bugs (SPEC 5.6). */
+  /** Distinct users hiding a sentence before it's flagged out of every pool (SPEC 1.6). */
+  FLAG_THRESHOLD: 3,
+  /** Per-user daily Merriam-Webster lookup cap (SPEC 0 / 5.10). */
   DAILY_NEW_WORD_LIMIT: 50,
 } as const;
 
