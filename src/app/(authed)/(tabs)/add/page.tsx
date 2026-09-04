@@ -1,12 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import type { WordContent } from "@/lib/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Word, WordContent } from "@/lib/types";
 import { useAppData } from "@/lib/store/provider";
-import { BackTitle, Button, Card, Screen } from "@/components/ui";
+import { BackTitle, Button, Card, Screen, SectionLabel } from "@/components/ui";
 import { IconSpinner } from "@/components/icons";
 import { WordPackage } from "@/components/WordPackage";
+
+type SaveStage = "sentences" | "quiz" | "saving";
+
+// Labels for the save button, updated as each real async step completes —
+// never on a timer (SPEC 1.1 / UI batch #7).
+const SAVE_STAGE_LABEL: Record<SaveStage, string> = {
+  sentences: "Writing example sentences…",
+  quiz: "Building quiz options…",
+  saving: "Saving word…",
+};
 
 type GenResult =
   | { status: "ok"; content: WordContent }
@@ -25,7 +35,13 @@ export default function AddWordPage() {
   const [result, setResult] = useState<GenResult | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveStage, setSaveStage] = useState<SaveStage | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const recent = useMemo(
+    () => [...deck].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 10),
+    [deck],
+  );
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -83,8 +99,11 @@ export default function AddWordPage() {
     try {
       let content = result.content;
 
-      // Dictionary-only word → run the LLM now (SPEC 1.1 step 4).
-      if (content.status === "dictionary_only") {
+      // Dictionary-only word → run the LLM now (SPEC 1.1 step 4), one
+      // sub-step per call so the stage label reflects what's actually
+      // happening (never a timer).
+      while (content.status === "dictionary_only") {
+        setSaveStage(content.sentences.length === 0 ? "sentences" : "quiz");
         const res = await fetch("/api/generate/save", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -102,6 +121,7 @@ export default function AddWordPage() {
         content = data.content;
       }
 
+      setSaveStage("saving");
       await addWord(content);
       setToast(`${content.word} saved`);
       setTerm("");
@@ -112,6 +132,7 @@ export default function AddWordPage() {
       setToast(e instanceof Error ? e.message : "Could not save");
     } finally {
       setSaving(false);
+      setSaveStage(null);
     }
   }
 
@@ -130,10 +151,7 @@ export default function AddWordPage() {
           ref={inputRef}
           value={term}
           onChange={(e) => setTerm(e.target.value)}
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          autoComplete="off"
+          autoCapitalize="none"
           enterKeyHint="search"
           placeholder="a single word"
           className="flex-1 rounded-[var(--r-input)] border border-border bg-surface px-4 py-3 font-serif text-lg outline-none focus:border-accent"
@@ -159,6 +177,10 @@ export default function AddWordPage() {
               void search(w);
             }}
             onRetry={() => void search(term)}
+            onDismiss={() => {
+              setResult(null);
+              inputRef.current?.focus();
+            }}
           />
         )}
 
@@ -182,12 +204,14 @@ export default function AddWordPage() {
             )}
           </Card>
         )}
+
+        {state === "idle" && !result && <RecentlyAdded words={recent} />}
       </div>
 
       {state === "preview" && (
         <div className="sticky bottom-0 space-y-2 bg-bg pt-3 safe-b">
           <Button onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save"}
+            {saving ? (saveStage ? SAVE_STAGE_LABEL[saveStage] : "Saving…") : "Save"}
           </Button>
           <Button
             variant="ghost"
@@ -214,10 +238,12 @@ function ResultCard({
   result,
   onPick,
   onRetry,
+  onDismiss,
 }: {
   result: Exclude<GenResult, { status: "ok" }>;
   onPick: (word: string) => void;
   onRetry: () => void;
+  onDismiss: () => void;
 }) {
   switch (result.status) {
     case "duplicate":
@@ -236,9 +262,14 @@ function ResultCard({
       return (
         <Card>
           <p>Did you mean {result.suggestion}?</p>
-          <Button className="mt-3 w-auto px-4" onClick={() => onPick(result.suggestion)}>
-            Yes
-          </Button>
+          <div className="mt-3 flex gap-2">
+            <Button className="w-auto px-4" onClick={() => onPick(result.suggestion)}>
+              Yes
+            </Button>
+            <Button variant="secondary" className="w-auto px-4" onClick={onDismiss}>
+              No
+            </Button>
+          </div>
         </Card>
       );
     case "not_found":
@@ -260,4 +291,23 @@ function ResultCard({
     case "unavailable":
       return <Card>No connection. Try again later.</Card>;
   }
+}
+
+function RecentlyAdded({ words }: { words: Word[] }) {
+  if (words.length === 0) return null;
+  return (
+    <div className="mt-2">
+      <SectionLabel>Recently added</SectionLabel>
+      <ul className="mt-2 divide-y divide-border">
+        {words.map((w) => (
+          <li key={w.id}>
+            <Link href={`/words/${w.id}`} className="flex items-center justify-between py-2.5">
+              <span className="font-serif text-[15px]">{w.word}</span>
+              <span className="text-sm text-text-faint">{w.pos}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

@@ -9,10 +9,12 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/generate/save  { "word_id": "uuid" }  — Save step (SPEC 1.1).
  *
- * Runs the two LLM calls for a `dictionary_only` word, appends the sentences +
- * distractors, and flips its status to `complete`. Idempotent: a word that is
- * already complete comes straight back. The client then creates the local
- * `user_cards` row, which syncs through /api/sync.
+ * Advances a `dictionary_only` word by ONE sub-step per call (sentences, then
+ * distractors + flip to `complete`) — see completeWord() — so the client can
+ * show real per-step progress instead of one static "Saving…" state. It calls
+ * this repeatedly until the response comes back `complete`. Idempotent: a word
+ * that is already complete comes straight back. The client then creates the
+ * local `user_cards` row, which syncs through /api/sync.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();

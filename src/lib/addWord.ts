@@ -152,7 +152,16 @@ export async function searchWord(rawInput: string, userId: string): Promise<Sear
   return { status: "ok", content: contentRowToContent(inserted as WordContentRow) };
 }
 
-/** Save step: fill in the LLM content for a `dictionary_only` word. Idempotent. */
+/**
+ * Save step: fill in the LLM content for a `dictionary_only` word.
+ *
+ * Does ONE sub-step per call — sentences first, then distractors + flip to
+ * `complete` — instead of both in one round trip. That's what lets the
+ * client show real per-step progress (SPEC 1.1 / add-word "staged saving")
+ * instead of a single static "Saving…" state: it calls this repeatedly,
+ * driven by the returned `content.status`, until it comes back `complete`.
+ * Idempotent either way: a word that's already complete comes straight back.
+ */
 export async function completeWord(wordId: string): Promise<CompleteResult> {
   const admin = createAdminClient();
 
@@ -166,11 +175,30 @@ export async function completeWord(wordId: string): Promise<CompleteResult> {
   const current = contentRowToContent(row as WordContentRow);
   if (current.status === "complete") return { status: "ok", content: current };
 
-  let sentences: Sentence[];
+  const input = { word: current.word, pos: current.pos, definition: current.definition };
+
+  // Step 1: example sentences — only if not written yet.
+  if (current.sentences.length === 0) {
+    let sentences: Sentence[];
+    try {
+      sentences = await generateSentences(input);
+    } catch (e) {
+      return { status: "error", detail: `The model call failed: ${errMessage(e)}` };
+    }
+    const { data: updated, error } = await admin
+      .from("words")
+      .update({ sentences })
+      .eq("id", wordId)
+      .select("*")
+      .maybeSingle();
+    if (error) return { status: "error", detail: error.message };
+    // Still `dictionary_only` — the caller makes one more call for distractors.
+    return { status: "ok", content: contentRowToContent((updated ?? row) as WordContentRow) };
+  }
+
+  // Step 2: quiz distractors, then flip to complete.
   let distractors: { distractor_defs: string[]; distractor_words: string[] };
   try {
-    const input = { word: current.word, pos: current.pos, definition: current.definition };
-    sentences = await generateSentences(input);
     distractors = await generateDistractors(input);
   } catch (e) {
     return { status: "error", detail: `The model call failed: ${errMessage(e)}` };
@@ -179,7 +207,6 @@ export async function completeWord(wordId: string): Promise<CompleteResult> {
   const { data: updated, error } = await admin
     .from("words")
     .update({
-      sentences,
       distractor_defs: distractors.distractor_defs,
       distractor_words: distractors.distractor_words,
       status: "complete",

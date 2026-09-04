@@ -95,11 +95,13 @@ export function WordDetailClient({ word }: { word: Word }) {
       )}
 
       <div className="font-serif text-[28px] font-semibold tracking-[-0.005em]">{word.word}</div>
-      {word.phonetic && (
+      {word.phonetic ? (
         <div className="flex items-center gap-1 text-text-dim">
           <span className="text-sm">{word.phonetic}</span>
           <Speak word={word.word} audioUrl={word.audio_url} />
         </div>
+      ) : (
+        <Speak word={word.word} audioUrl={word.audio_url} />
       )}
 
       <div className="mt-3 font-serif text-[15px] italic text-text-faint">{word.pos}</div>

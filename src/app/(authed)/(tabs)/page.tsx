@@ -43,7 +43,7 @@ export default function HomePage() {
         <p className="mt-3 font-serif text-[15px] text-text-dim">{streakLine}</p>
       </div>
 
-      <div className="my-6 h-px bg-border" />
+      <div className="my-6 h-px" aria-hidden="true" />
 
       <div>
         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-faint">
