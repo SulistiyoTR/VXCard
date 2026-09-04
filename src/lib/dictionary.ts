@@ -41,7 +41,7 @@ interface MwEntry {
   meta?: { id?: string };
   fl?: string;
   shortdef?: string[];
-  hwi?: { hw?: string; prs?: { mw?: string; sound?: { audio?: string } }[] };
+  hwi?: { hw?: string; prs?: { mw?: string; ipa?: string; sound?: { audio?: string } }[] };
   et?: unknown[];
 }
 
@@ -85,7 +85,9 @@ function parseMw(data: MwEntry[], word: string): DictionaryFacts | null {
 
   return {
     word: (head.meta?.id ?? word).split(":")[0].toLowerCase(),
-    phonetic: prs?.mw ? `/${prs.mw}/` : null,
+    // `mw` (MW-style respelling) isn't always present on this plan/dictionary —
+    // `ipa` is. Prefer `mw` when we have it, fall back to `ipa`.
+    phonetic: prs?.mw ? `/${prs.mw}/` : prs?.ipa ? `/${prs.ipa}/` : null,
     audio_url: audio ? mwAudioUrl(audio) : null,
     pos: primary.pos,
     definition: primary.definition,
