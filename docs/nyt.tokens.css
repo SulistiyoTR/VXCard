@@ -1,0 +1,151 @@
+/* Design Tokens - Auto-generated */
+/* Do not edit directly - modify tokens.json instead */
+
+/* === PRIMITIVES === */
+:root {
+  --primitive-color-ink: #121212;
+  --primitive-color-white: #ffffff;
+  --primitive-color-gray-50: #f8f8f8;
+  --primitive-color-gray-100: #ebebeb;
+  --primitive-color-gray-200: #dfdfdf;
+  --primitive-color-gray-300: #c7c7c7;
+  --primitive-color-gray-400: #959595;
+  --primitive-color-gray-500: #8b8b8b;
+  --primitive-color-gray-600: #727272;
+  --primitive-color-gray-700: #5a5a5a;
+  --primitive-color-gray-800: #363636;
+  --primitive-color-gray-850: #2a2a2a;
+  --primitive-color-gray-900: #121212;
+  --primitive-color-blue-editorial: #326891;
+  --primitive-color-blue-editorial-dim: #7ca7c8;
+  --primitive-color-blue-link: #346eb7;
+  --primitive-color-blue-link-dark: #6ba1dd;
+  --primitive-color-blue-legacy: #567b95;
+  --primitive-color-red-breaking: #d0021b;
+  --primitive-color-red-breaking-dark: #e14e5b;
+  --primitive-color-red-negative: #a90111;
+  --primitive-color-red-negative-dark: #ea7980;
+  --primitive-color-green-positive: #267c30;
+  --primitive-color-green-positive-dark: #63a859;
+  --primitive-color-orange-developing: #e6540a;
+  --primitive-color-orange-developing-dark: #f78145;
+  --primitive-color-yellow-highlight: #fefad1;
+  --primitive-color-yellow-highlight-dark: #35352f;
+  --primitive-color-scrim: #12121299;
+  --primitive-fontFamily-cheltenham: nyt-cheltenham, 'Playfair Display', Georgia, 'Times New Roman', Times, serif;
+  --primitive-fontFamily-cheltenham-cond: nyt-cheltenham-cond, 'Playfair Display', Georgia, serif;
+  --primitive-fontFamily-imperial: nyt-imperial, Georgia, 'Times New Roman', Times, serif;
+  --primitive-fontFamily-franklin: nyt-franklin, 'Libre Franklin', Helvetica, Arial, sans-serif;
+  --primitive-fontFamily-karnak: nyt-karnak, 'Zilla Slab', Georgia, serif;
+  --primitive-fontWeight-ultra-light: 100;
+  --primitive-fontWeight-light: 200;
+  --primitive-fontWeight-book: 400;
+  --primitive-fontWeight-medium: 500;
+  --primitive-fontWeight-semibold: 600;
+  --primitive-fontWeight-bold: 700;
+  --primitive-fontWeight-extrabold: 800;
+  --primitive-fontWeight-black: 900;
+  --primitive-fontSize-10: 0.625rem;
+  --primitive-fontSize-11: 0.6875rem;
+  --primitive-fontSize-12: 0.75rem;
+  --primitive-fontSize-14: 0.875rem;
+  --primitive-fontSize-16: 1rem;
+  --primitive-fontSize-18: 1.125rem;
+  --primitive-fontSize-20: 1.25rem;
+  --primitive-fontSize-22: 1.375rem;
+  --primitive-fontSize-24: 1.5rem;
+  --primitive-fontSize-26: 1.625rem;
+  --primitive-fontSize-28: 1.75rem;
+  --primitive-fontSize-32: 2rem;
+  --primitive-fontSize-36: 2.25rem;
+  --primitive-fontSize-40: 2.5rem;
+  --primitive-fontSize-48: 3rem;
+  --primitive-fontSize-56: 3.5rem;
+  --primitive-fontSize-64: 4rem;
+  --primitive-lineHeight-tight: 1;
+  --primitive-lineHeight-hairline: 1.1;
+  --primitive-lineHeight-heading: 1.15;
+  --primitive-lineHeight-snug: 1.2;
+  --primitive-lineHeight-label: 1.25;
+  --primitive-lineHeight-ui: 1.3;
+  --primitive-lineHeight-body: 1.39;
+  --primitive-lineHeight-relaxed: 1.5;
+  --primitive-letterSpacing-headline: 0.0025em;
+  --primitive-letterSpacing-tight: 0.01em;
+  --primitive-letterSpacing-wide: 0.05em;
+  --primitive-letterSpacing-label: 0.1em;
+  --primitive-spacing-1: 0.5rem;
+  --primitive-spacing-2: 1rem;
+  --primitive-spacing-3: 1.5rem;
+  --primitive-spacing-4: 2rem;
+  --primitive-spacing-5: 2.5rem;
+  --primitive-spacing-6: 3rem;
+  --primitive-spacing-0-5: 0.25rem;
+  --primitive-spacing-1-5: 0.75rem;
+  --primitive-spacing-2-5: 1.25rem;
+  --primitive-radius-none: 0;
+  --primitive-radius-sm: 3px;
+  --primitive-radius-full: 9999px;
+  --primitive-borderWidth-1: 1px;
+  --primitive-borderWidth-2: 2px;
+  --primitive-borderWidth-3: 3px;
+  --primitive-borderWidth-1-5: 1.5px;
+}
+
+/* === SEMANTIC === */
+:root {
+  --color-background: #ffffff;
+  --color-background-secondary: #f8f8f8;
+  --color-background-tertiary: #ebebeb;
+  --color-background-highlight: #fefad1;
+  --color-foreground: #121212;
+  --color-foreground-secondary: #5a5a5a;
+  --color-foreground-muted: #727272;
+  --color-placeholder: #8b8b8b;
+  --color-border: #dfdfdf;
+  --color-border-strong: #121212;
+  --color-link: #346eb7;
+  --color-accent: #326891;
+  --color-destructive: #d0021b;
+  --color-negative: #a90111;
+  --color-positive: #267c30;
+  --color-developing: #e6540a;
+  --typography-headline-news: var(--primitive-fontWeight-bold) var(--primitive-fontSize-32)/var(--primitive-lineHeight-snug) var(--primitive-fontFamily-cheltenham);
+  --typography-headline-feature: var(--primitive-fontWeight-light) var(--primitive-fontSize-48)/var(--primitive-lineHeight-heading) var(--primitive-fontFamily-cheltenham);
+  --typography-headline-opinion: var(--primitive-fontWeight-bold) var(--primitive-fontSize-24)/var(--primitive-lineHeight-heading) var(--primitive-fontFamily-cheltenham-cond);
+  --typography-body: var(--primitive-fontWeight-book) var(--primitive-fontSize-18)/var(--primitive-lineHeight-body) var(--primitive-fontFamily-imperial);
+  --typography-ui-text: var(--primitive-fontWeight-medium) var(--primitive-fontSize-16)/var(--primitive-lineHeight-ui) var(--primitive-fontFamily-franklin);
+  --typography-ui-title: var(--primitive-fontWeight-semibold) var(--primitive-fontSize-16)/var(--primitive-lineHeight-ui) var(--primitive-fontFamily-franklin);
+  --typography-label: var(--primitive-fontWeight-semibold) var(--primitive-fontSize-11)/var(--primitive-lineHeight-label) var(--primitive-fontFamily-franklin);
+}
+
+/* === COMPONENTS === */
+:root {
+  --button-bg: #ffffff;
+  --button-fg: #121212;
+  --button-border: #121212;
+  --button-radius: 3px;
+  --button-height: 44px;
+  --button-font: var(--typography-ui-title);
+  --divider-story: 1px solid var(--primitive-color-gray-200);
+  --divider-section: 2px solid var(--primitive-color-ink);
+}
+
+/* === DARK MODE === */
+.dark {
+  --color-background: #121212;
+  --color-background-secondary: #2a2a2a;
+  --color-background-tertiary: #363636;
+  --color-background-highlight: #35352f;
+  --color-foreground: #f8f8f8;
+  --color-foreground-secondary: #bbbbbb;
+  --color-foreground-muted: #a3a3a3;
+  --color-border: #424242;
+  --color-border-strong: #f8f8f8;
+  --color-link: #6ba1dd;
+  --color-accent: #7ca7c8;
+  --color-destructive: #e14e5b;
+  --color-negative: #ea7980;
+  --color-positive: #63a859;
+  --color-developing: #f78145;
+}
