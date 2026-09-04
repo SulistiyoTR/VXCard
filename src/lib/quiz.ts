@@ -15,7 +15,7 @@ export interface Question {
   options: string[];
   /** The correct option / spelling. */
   answer: string;
-  /** Index in `sentences` that was shown, so the caller can bump used_count. */
+  /** Index in `sentences` that was shown, so the caller can bump `sentence_usage`. */
   sentenceIndex?: number;
 }
 
@@ -24,16 +24,26 @@ export function quizLevel(level: number): QuizLevel {
   return Math.min(4, Math.max(1, level)) as QuizLevel;
 }
 
-/** Pick the least-used example sentence; ties broken at random (SPEC 1.6). */
+/**
+ * Rotate example sentences (SPEC 1.6): skip flagged/hidden ones, then pick the
+ * one this user has seen least; ties broken at random. `usage` is the per-user
+ * `sentence_usage` array (parallel to `sentences`; missing entries read as 0).
+ */
 export function pickSentence(
   sentences: readonly Sentence[],
+  usage: readonly number[] = [],
+  hidden: readonly number[] = [],
   rng: Rng = Math.random,
 ): { sentence: Sentence; index: number } | null {
   if (sentences.length === 0) return null;
-  const min = Math.min(...sentences.map((s) => s.used_count));
-  const candidates = sentences
+  const hiddenSet = new Set(hidden);
+  const available = sentences
     .map((s, i) => ({ s, i }))
-    .filter(({ s }) => s.used_count === min);
+    .filter(({ s, i }) => !s.flagged && !hiddenSet.has(i));
+  const pool = available.length > 0 ? available : sentences.map((s, i) => ({ s, i }));
+  const use = (i: number) => usage[i] ?? 0;
+  const min = Math.min(...pool.map(({ i }) => use(i)));
+  const candidates = pool.filter(({ i }) => use(i) === min);
   const chosen = candidates[Math.floor(rng() * candidates.length)];
   return { sentence: chosen.s, index: chosen.i };
 }
@@ -91,7 +101,7 @@ export function buildQuestion(
   }
 
   // Levels 3 & 4 — cloze
-  const picked = pickSentence(word.sentences, rng);
+  const picked = pickSentence(word.sentences, word.sentence_usage, word.hidden_sentences, rng);
   const sentenceText = picked?.sentence.text ?? word.definition;
   const form = picked?.sentence.form ?? word.word;
   const sentence = picked ? blank(sentenceText, form) : sentenceText;

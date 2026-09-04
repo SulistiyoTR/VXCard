@@ -4,14 +4,14 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { Review, SessionRow, Word } from "@/lib/types";
 import { useOnline } from "@/lib/useOnline";
 import {
-  addWordLocal,
-  deleteWordLocal,
+  addCardLocal,
+  deleteCardLocal,
   enqueueReview,
   isSeeded,
   loadDeck,
   loadReviews,
   loadSessions,
-  patchWordLocal,
+  patchCardLocal,
   upsertSessionLocal,
 } from "./local";
 import { seedFromServer, seedFromSnapshot, sync } from "./sync";
@@ -106,7 +106,7 @@ export function AppDataProvider({
 
   const addWord = useCallback(
     async (word: Word) => {
-      await addWordLocal(word);
+      await addCardLocal(word);
       await reload();
       void refresh();
     },
@@ -115,7 +115,7 @@ export function AppDataProvider({
 
   const patchWord = useCallback(
     async (id: string, patch: Partial<Word>) => {
-      await patchWordLocal(id, patch);
+      await patchCardLocal(id, patch);
       await reload();
       void refresh();
     },
@@ -124,7 +124,7 @@ export function AppDataProvider({
 
   const removeWord = useCallback(
     async (id: string) => {
-      await deleteWordLocal(id);
+      await deleteCardLocal(id);
       await reload();
       void refresh();
     },

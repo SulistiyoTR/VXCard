@@ -1,12 +1,25 @@
 import { NextResponse } from "next/server";
-import { requireUser, rowToWord, type WordRow } from "@/lib/data";
+import {
+  cardRowToCard,
+  contentRowToContent,
+  requireUser,
+  type UserCardRow,
+  type WordContentRow,
+} from "@/lib/data";
 import { createClient } from "@/lib/supabase/server";
-import type { Review, SessionRow, Word } from "@/lib/types";
+import type { Review, SessionRow, UserCard } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+const EPOCH = "1970-01-01T00:00:00.000Z";
+
 /**
  * GET /api/sync?since=<iso>  — remote changes since `since` (SPEC 6.4).
+ *
+ * `words` is shared content: we return the rows behind this user's cards whose
+ * content changed since `since` (so a growing sentence pool reaches the phone
+ * even when the card itself didn't move). `cards` / `sessions` / `reviews` are
+ * per-user.
  */
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -15,25 +28,35 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const since = new URL(request.url).searchParams.get("since") ?? "1970-01-01T00:00:00.000Z";
+  const since = new URL(request.url).searchParams.get("since") ?? EPOCH;
   const serverTime = new Date().toISOString();
   const reviewWindow = new Date(Date.now() - 35 * 86_400_000).toISOString();
   const reviewsSince = since > reviewWindow ? since : reviewWindow;
+  const isFullSeed = since === EPOCH;
 
-  const isFullSeed = since === "1970-01-01T00:00:00.000Z";
+  // Every word_id this user has a card for — drives the content query.
+  const { data: cardRefs } = await supabase
+    .from("user_cards")
+    .select("word_id")
+    .eq("user_id", user.id);
+  const wordIds = [...new Set((cardRefs ?? []).map((r) => r.word_id as string))];
+  // A sentinel keeps `.in()` non-empty when the deck has no cards yet.
+  const contentIds = wordIds.length ? wordIds : ["00000000-0000-0000-0000-000000000000"];
 
-  const [wordsRes, sessionsRes, reviewsRes] = await Promise.all([
-    isFullSeed
-      ? supabase.from("words").select("*").eq("user_id", user.id)
-      : supabase.from("words").select("*").eq("user_id", user.id).gt("updated_at", since),
-    isFullSeed
-      ? supabase.from("sessions").select("*").eq("user_id", user.id)
-      : supabase.from("sessions").select("*").eq("user_id", user.id).gt("updated_at", since),
+  const cardsQuery = supabase.from("user_cards").select("*").eq("user_id", user.id);
+  const sessionsQuery = supabase.from("sessions").select("*").eq("user_id", user.id);
+  const contentQuery = supabase.from("words").select("*").in("id", contentIds);
+
+  const [cardsRes, sessionsRes, reviewsRes, contentRes] = await Promise.all([
+    isFullSeed ? cardsQuery : cardsQuery.gt("updated_at", since),
+    isFullSeed ? sessionsQuery : sessionsQuery.gt("updated_at", since),
     supabase.from("reviews").select("*").eq("user_id", user.id).gt("reviewed_at", reviewsSince),
+    isFullSeed ? contentQuery : contentQuery.gt("updated_at", since),
   ]);
 
   return NextResponse.json({
-    words: ((wordsRes.data ?? []) as WordRow[]).map(rowToWord),
+    words: ((contentRes.data ?? []) as WordContentRow[]).map(contentRowToContent),
+    cards: ((cardsRes.data ?? []) as UserCardRow[]).map(cardRowToCard),
     sessions: (sessionsRes.data ?? []) as SessionRow[],
     reviews: reviewsRes.data ?? [],
     serverTime,
@@ -42,14 +65,16 @@ export async function GET(request: Request) {
 
 interface PushBody {
   reviews?: Review[];
-  words?: Word[];
+  cards?: UserCard[];
   sessions?: SessionRow[];
+  /** `word_id`s of removed cards. */
   deletions?: string[];
 }
 
 /**
- * POST /api/sync — apply the client outbox. Words/sessions use last-write-wins
+ * POST /api/sync — apply the client outbox. Cards/sessions use last-write-wins
  * on `updated_at`; reviews are inserted idempotently by their client id.
+ * Shared `words` content is never written here.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -63,12 +88,16 @@ export async function POST(request: Request) {
   }
 
   const reviews = body.reviews ?? [];
-  const words = body.words ?? [];
+  const cards = body.cards ?? [];
   const sessions = body.sessions ?? [];
   const deletions = body.deletions ?? [];
 
   if (deletions.length) {
-    await supabase.from("words").delete().eq("user_id", user.id).in("id", deletions);
+    await supabase
+      .from("user_cards")
+      .delete()
+      .eq("user_id", user.id)
+      .in("word_id", deletions);
   }
 
   if (reviews.length) {
@@ -88,42 +117,39 @@ export async function POST(request: Request) {
     );
   }
 
-  // Words — last-write-wins.
-  if (words.length) {
-    const ids = words.map((w) => w.id);
+  // Cards — last-write-wins on (user_id, word_id).
+  if (cards.length) {
+    const wordIds = cards.map((c) => c.word_id);
     const { data: existing } = await supabase
-      .from("words")
-      .select("id, updated_at")
+      .from("user_cards")
+      .select("word_id, updated_at")
       .eq("user_id", user.id)
-      .in("id", ids);
-    const stamps = new Map((existing ?? []).map((r) => [r.id as string, r.updated_at as string]));
+      .in("word_id", wordIds);
+    const stamps = new Map(
+      (existing ?? []).map((r) => [r.word_id as string, r.updated_at as string]),
+    );
 
-    for (const w of words) {
-      const prev = stamps.get(w.id);
-      if (prev && prev > w.updated_at) continue; // remote is newer — keep it
-      const payload = {
-        id: w.id,
-        user_id: user.id,
-        word: w.word,
-        created_at: w.created_at,
-        phonetic: w.phonetic,
-        audio_url: w.audio_url,
-        pos: w.pos,
-        definition: w.definition,
-        origin: w.origin,
-        other_meanings: w.other_meanings,
-        sentences: w.sentences,
-        distractor_defs: w.distractor_defs,
-        distractor_words: w.distractor_words,
-        level: w.level,
-        streak: w.streak,
-        due_date: w.due_date,
-        lapse_count: w.lapse_count,
-        review_count: w.review_count,
-        last_seen_date: w.last_seen_date,
-        updated_at: w.updated_at,
-      };
-      await supabase.from("words").upsert(payload, { onConflict: "id" });
+    for (const c of cards) {
+      const prev = stamps.get(c.word_id);
+      if (prev && prev > c.updated_at) continue; // remote is newer — keep it
+      await supabase.from("user_cards").upsert(
+        {
+          id: c.id,
+          user_id: user.id,
+          word_id: c.word_id,
+          level: c.level,
+          streak: c.streak,
+          due_date: c.due_date,
+          lapse_count: c.lapse_count,
+          last_seen_date: c.last_seen_date,
+          sentence_usage: c.sentence_usage,
+          hidden_sentences: c.hidden_sentences,
+          review_count: c.review_count,
+          created_at: c.created_at,
+          updated_at: c.updated_at,
+        },
+        { onConflict: "user_id,word_id" },
+      );
     }
   }
 

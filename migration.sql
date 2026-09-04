@@ -93,6 +93,9 @@ create table public.user_cards (
   sentence_usage    jsonb       not null default '[]'::jsonb,
   hidden_sentences  jsonb       not null default '[]'::jsonb,
 
+  -- denormalised total review count so Word detail works offline (SPEC 4.9)
+  review_count      int         not null default 0,
+
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),
 
