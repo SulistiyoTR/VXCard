@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Button, Screen } from "@/components/ui";
+import { Button } from "@/components/ui";
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
@@ -25,8 +25,8 @@ export default function LoginPage() {
   }
 
   return (
-    <Screen className="items-center justify-center gap-8 px-6">
-      <div className="text-center">
+    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-center gap-10 px-6 text-center safe-b">
+      <div>
         <div className="font-serif text-[40px] font-medium tracking-[-0.02em]">VX Card</div>
         <p className="mt-2 text-text-dim">Vocabulary, one word at a time.</p>
       </div>
@@ -34,8 +34,8 @@ export default function LoginPage() {
         <Button onClick={signIn} disabled={busy}>
           {busy ? "Opening Google…" : "Continue with Google"}
         </Button>
-        {error && <p className="mt-3 text-center text-sm text-bad">{error}</p>}
+        {error && <p className="mt-3 text-sm text-bad">{error}</p>}
       </div>
-    </Screen>
+    </div>
   );
 }
