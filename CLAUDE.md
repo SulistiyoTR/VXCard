@@ -20,13 +20,15 @@ order) first.
   only). Personal learning state lives in `user_cards`. See `UPDATE-PLAN.md`.
 - All tunable numbers live in `src/lib/config.ts` — never hardcode them elsewhere.
 - The Anthropic API key is server-only. It must never appear in a client bundle;
-  the single call site is `src/lib/llm.ts` via `src/app/api/generate/route.ts`.
+  the single call site is `src/lib/llm.ts` (via `src/lib/addWord.ts` +
+  `src/lib/actions.ts`). Merriam-Webster is the only dictionary source
+  (`MERRIAM_WEBSTER_KEY`), server-only, no fallback.
 - Test on a phone, not just the laptop browser.
 
 ## Architecture
 
 - **Pure logic** in `src/lib/*.ts` (no `next/*`, no React) — `scheduler`, `session`,
-  `quiz`, `streak`, `statsCalc`, `store/merge`, `generate`. All have `*.test.ts`; `npm test`.
+  `quiz`, `streak`, `statsCalc`, `store/merge`, `store/shape`. Most have `*.test.ts`; `npm test`.
 - **Offline-first (SPEC 6.4)**: IndexedDB backs the client. `src/lib/store/`
   — `idb` (schema v2), `shape` (pure `joinWord` / `splitWord`), `local` (CRUD + outbox),
   `sync` (push→pull, LWW via `merge.ts`), `provider` (`AppDataProvider` / `useAppData`).
@@ -46,7 +48,15 @@ order) first.
   phone). POST applies the outbox: `cards` (LWW on `updated_at`, `onConflict user_id,word_id`)
   and `sessions` LWW, `reviews` idempotent by client uuid, card deletions honoured.
   Shared `words` is never written here.
-- **Server writes that must stay online** (LLM): `src/lib/actions.ts` —
+- **Add word** (`src/lib/addWord.ts`, service-role): `POST /api/generate` = search —
+  check the shared `words` table, only call MW for a genuinely new word (rate-limited
+  via `mw_lookups`, counter bumped **before** the call), store facts as
+  `dictionary_only`, no LLM. `POST /api/generate/save` = complete — 2 LLM calls on Save,
+  append sentences + distractors, flip to `complete`. Cancel keeps the dictionary row.
+  The client then creates the local `user_cards` row (`addCardLocal`), which syncs.
+  "In your deck" (client `deck` + server `user_cards` check) vs "in the global table"
+  are distinct.
+- **Other server writes that must stay online** (LLM): `src/lib/actions.ts` —
   `regenerateSentence` (inert until Sesi 4/6), `signOut`. Everything else is local.
 - **Auth**: Supabase Google OAuth. `src/proxy.ts` gates routes; `/api`, `/auth`,
   `/login` are public.
@@ -69,21 +79,21 @@ Six tables (SPEC §5): `words` (shared, no `user_id`), `user_cards`, `reviews`,
 `distractor_*` / `sentence_usage` / `hidden_sentences` are `jsonb`; `sentences` is
 append-only (index-referenced by `user_cards.sentence_usage`). `words.updated_at` is
 bumped by a trigger; `user_cards.updated_at` is set by the client (LWW), no trigger.
-Ticket functions: `claim_sentence_tickets` (`FOR UPDATE SKIP LOCKED`) and
-`complete_sentence_ticket` — call via `supabase.rpc()` with the service-role key.
+RPCs (service-role only): `claim_sentence_tickets` (`FOR UPDATE SKIP LOCKED`) +
+`complete_sentence_ticket` for the ticket queue; `increment_mw_lookup(user_id, day)`
+for the Add-word rate limit.
 
 ## Gotchas
 
 - Next.js 16: `middleware.ts` → `proxy.ts` (exports `proxy`). `params` / `searchParams`
   are Promises. See `node_modules/next/dist/docs/` before using unfamiliar APIs.
 - Dates are plain `YYYY-MM-DD` strings throughout (`src/lib/date.ts`), local-day based.
-- New word = `due_date` tomorrow, level 1 (SPEC 3.4). No inbox. Quota is now a MW
-  lookup cap (`mw_lookups`, Sesi 3), not a per-word one.
+- New word = `due_date` tomorrow, level 1 (SPEC 3.4). No inbox. Quota is a per-user
+  daily MW-lookup cap (`mw_lookups` / `increment_mw_lookup` RPC), not a per-word one.
 - Lint enforces the React purity rules — no `setState` in an effect, no `Date.now()`
   in a ref initializer, no `ref.current` in render. Use `src/lib/useLocalStorage.ts`
   / `src/lib/useOnline.ts` (both `useSyncExternalStore`) for that class of state.
 - IDs for offline-created rows are `crypto.randomUUID()` client-side; the sync
   POST fills `user_id`. Bump `updated_at` on every local card edit (`patchCardLocal` does).
-- **Sesi 2 done; Sesi 3 next.** `/api/generate` still queries `words.user_id` (Sesi 3
-  rework) — Add-word won't persist yet. The app otherwise runs on an empty deck with
-  sync working.
+- **Sesi 1–3 done; Sesi 4 next** (per-user sentence rotation + `sentence_usage`
+  bump-on-display + the ticket auto-grow). Add-word works end to end now.

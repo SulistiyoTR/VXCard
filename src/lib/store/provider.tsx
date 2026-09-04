@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import type { Review, SessionRow, Word } from "@/lib/types";
+import type { Review, SessionRow, Word, WordContent } from "@/lib/types";
 import { useOnline } from "@/lib/useOnline";
 import {
   addCardLocal,
@@ -24,7 +24,8 @@ export interface AppData {
   sessions: SessionRow[];
   reviews: Review[];
   refresh: () => Promise<void>;
-  addWord: (word: Word) => Promise<void>;
+  /** Add flow: `content` is the shared row already persisted server-side. */
+  addWord: (content: WordContent) => Promise<void>;
   patchWord: (id: string, patch: Partial<Word>) => Promise<void>;
   removeWord: (id: string) => Promise<void>;
   recordReview: (review: Review) => Promise<void>;
@@ -105,8 +106,8 @@ export function AppDataProvider({
   }, [online, ready, refresh]);
 
   const addWord = useCallback(
-    async (word: Word) => {
-      await addCardLocal(word);
+    async (content: WordContent) => {
+      await addCardLocal(content);
       await reload();
       void refresh();
     },

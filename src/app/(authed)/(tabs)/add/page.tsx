@@ -2,58 +2,25 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { addDays, today } from "@/lib/date";
-import type { GeneratedPackage, Word } from "@/lib/types";
+import type { WordContent } from "@/lib/types";
 import { useAppData } from "@/lib/store/provider";
 import { Button, Card, Screen } from "@/components/ui";
 import { WordPackage } from "@/components/WordPackage";
 
-function packageToWord(pkg: GeneratedPackage): Word {
-  const now = new Date().toISOString();
-  return {
-    id: crypto.randomUUID(),
-    word: pkg.word,
-    created_at: now,
-    updated_at: now,
-    phonetic: pkg.phonetic,
-    audio_url: pkg.audio_url,
-    pos: pkg.pos,
-    definition: pkg.definition,
-    origin: pkg.origin,
-    other_meanings: pkg.other_meanings,
-    sentences: pkg.sentences,
-    distractor_defs: pkg.distractor_defs,
-    distractor_words: pkg.distractor_words,
-    status: "complete",
-    pool_full: false,
-    level: 1,
-    streak: 0,
-    due_date: addDays(today(), 1),
-    lapse_count: 0,
-    review_count: 0,
-    last_seen_date: null,
-    sentence_usage: [],
-    hidden_sentences: [],
-  };
-}
-
-type Stage = "lookup" | "sentences" | "distractors";
-
 type GenResult =
-  | { status: "ok"; package: GeneratedPackage }
+  | { status: "ok"; content: WordContent }
   | { status: "duplicate"; word: { id: string; word: string; level: number; due_date: string } }
   | { status: "suggestion"; word: string; suggestion: string }
   | { status: "not_found"; word: string }
   | { status: "phrase" }
   | { status: "rate_limited"; limit: number }
   | { status: "error"; detail: string }
-  | { status: "unavailable" }; // client-side: offline or the stream never arrived
+  | { status: "unavailable" }; // client-side: offline or the request failed
 
 export default function AddWordPage() {
   const { addWord, online, deck } = useAppData();
   const [term, setTerm] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "preview">("idle");
-  const [stage, setStage] = useState<Stage>("lookup");
   const [result, setResult] = useState<GenResult | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -73,6 +40,7 @@ export default function AddWordPage() {
     const q = raw.trim().toLowerCase();
     if (!q) return;
 
+    // Local deck check first — instant, works offline.
     const local = deck.find((w) => w.word === q);
     if (local) {
       setResult({
@@ -87,48 +55,21 @@ export default function AddWordPage() {
     }
 
     setState("loading");
-    setStage("lookup");
     setResult(null);
-
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ word: q }),
       });
-      if (!res.ok || !res.body) {
+      if (!res.ok) {
         setResult({ status: "unavailable" });
         setState("idle");
         return;
       }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let final: GenResult | null = null;
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let nl;
-        while ((nl = buffer.indexOf("\n\n")) !== -1) {
-          const chunk = buffer.slice(0, nl).trim();
-          buffer = buffer.slice(nl + 2);
-          if (!chunk.startsWith("data:")) continue;
-          const ev = JSON.parse(chunk.slice(5).trim());
-          if (ev.type === "stage") setStage(ev.stage as Stage);
-          else if (ev.type === "result") final = ev.result as GenResult;
-        }
-      }
-
-      if (!final) {
-        setResult({ status: "unavailable" });
-        setState("idle");
-        return;
-      }
-      setResult(final);
-      setState(final.status === "ok" ? "preview" : "idle");
+      const data = (await res.json()) as GenResult;
+      setResult(data);
+      setState(data.status === "ok" ? "preview" : "idle");
     } catch {
       setResult({ status: "unavailable" });
       setState("idle");
@@ -139,8 +80,29 @@ export default function AddWordPage() {
     if (result?.status !== "ok") return;
     setSaving(true);
     try {
-      await addWord(packageToWord(result.package));
-      setToast(`${result.package.word} saved`);
+      let content = result.content;
+
+      // Dictionary-only word → run the LLM now (SPEC 1.1 step 4).
+      if (content.status === "dictionary_only") {
+        const res = await fetch("/api/generate/save", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ word_id: content.id }),
+        });
+        const data = (await res.json().catch(() => null)) as
+          | { status: "ok"; content: WordContent }
+          | { status: "error"; detail?: string }
+          | null;
+        if (!res.ok || !data || data.status !== "ok") {
+          const detail = data && "detail" in data ? data.detail : undefined;
+          setToast(detail ? `Save failed: ${detail}` : "Could not save. Try again.");
+          return;
+        }
+        content = data.content;
+      }
+
+      await addWord(content);
+      setToast(`${content.word} saved`);
       setTerm("");
       setResult(null);
       setState("idle");
@@ -186,7 +148,12 @@ export default function AddWordPage() {
       </form>
 
       <div className="mt-6 flex-1">
-        {state === "loading" && <GenProgress term={term.trim().toLowerCase()} stage={stage} />}
+        {state === "loading" && (
+          <p className="flex items-center gap-2 text-sm text-text-dim">
+            <span className="inline-block animate-spin text-accent">◐</span>
+            Looking up “{term.trim().toLowerCase()}”
+          </p>
+        )}
 
         {result && result.status !== "ok" && (
           <ResultCard
@@ -202,16 +169,21 @@ export default function AddWordPage() {
         {state === "preview" && result?.status === "ok" && (
           <Card>
             <WordPackage
-              word={result.package.word}
-              phonetic={result.package.phonetic}
-              audioUrl={result.package.audio_url}
-              pos={result.package.pos}
-              definition={result.package.definition}
-              origin={result.package.origin}
-              otherMeanings={result.package.other_meanings}
-              sentences={result.package.sentences}
+              word={result.content.word}
+              phonetic={result.content.phonetic}
+              audioUrl={result.content.audio_url}
+              pos={result.content.pos}
+              definition={result.content.definition}
+              origin={result.content.origin}
+              otherMeanings={result.content.other_meanings}
+              sentences={result.content.sentences}
               expandableSentences
             />
+            {result.content.status === "dictionary_only" && (
+              <p className="mt-3 text-sm text-text-faint">
+                Example sentences and quiz options are written when you save.
+              </p>
+            )}
           </Card>
         )}
       </div>
@@ -239,33 +211,6 @@ export default function AddWordPage() {
         </div>
       )}
     </Screen>
-  );
-}
-
-function GenProgress({ term, stage }: { term: string; stage: Stage }) {
-  const idx = stage === "lookup" ? 0 : stage === "sentences" ? 1 : 2;
-  const steps = [
-    `Looking up “${term}”`,
-    "Writing 5 example sentences",
-    "Building the answer options",
-  ];
-  return (
-    <ul className="space-y-3">
-      {steps.map((s, i) => (
-        <li key={i} className="flex items-center gap-3 text-sm">
-          <span className="w-4 text-center">
-            {i < idx ? (
-              <span className="text-good">✓</span>
-            ) : i === idx ? (
-              <span className="inline-block animate-spin text-accent">◐</span>
-            ) : (
-              <span className="text-text-faint">○</span>
-            )}
-          </span>
-          <span className={i <= idx ? "text-text" : "text-text-faint"}>{s}</span>
-        </li>
-      ))}
-    </ul>
   );
 }
 
@@ -305,7 +250,7 @@ function ResultCard({
     case "phrase":
       return <Card>Only single words for now.</Card>;
     case "rate_limited":
-      return <Card>Daily limit of {result.limit} new words reached. Try again tomorrow.</Card>;
+      return <Card>Daily limit of {result.limit} new-word lookups reached. Try again tomorrow.</Card>;
     case "error":
       return (
         <Card>

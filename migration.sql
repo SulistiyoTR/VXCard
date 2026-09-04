@@ -31,6 +31,7 @@ create extension if not exists "pgcrypto";  -- gen_random_uuid()
 -- (the words_touch_updated_at trigger drops automatically with public.words below)
 drop function if exists public.claim_sentence_tickets(integer, integer);
 drop function if exists public.complete_sentence_ticket(uuid, jsonb, integer);
+drop function if exists public.increment_mw_lookup(uuid, date);
 drop function if exists public.touch_updated_at();
 
 drop table if exists public.reviews            cascade;
@@ -320,11 +321,37 @@ begin
 end;
 $$;
 
+-- ----------------------------------------------------------------------------
+-- increment_mw_lookup(user_id, day)
+--
+-- Atomically bumps this user's Merriam-Webster lookup counter for `day` and
+-- returns the new value. The Add-word endpoint checks the current count first,
+-- then calls this right before the MW request (failed requests still count).
+-- ----------------------------------------------------------------------------
+create function public.increment_mw_lookup(p_user_id uuid, p_day date)
+returns integer
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  new_count integer;
+begin
+  insert into public.mw_lookups (user_id, day, count)
+  values (p_user_id, p_day, 1)
+  on conflict (user_id, day)
+  do update set count = public.mw_lookups.count + 1
+  returning count into new_count;
+  return new_count;
+end;
+$$;
+
 -- These functions run from the backend with the service-role key. Keep them
 -- off the client roles.
-revoke execute on function public.claim_sentence_tickets(integer, integer)     from public, anon, authenticated;
+revoke execute on function public.claim_sentence_tickets(integer, integer)      from public, anon, authenticated;
 revoke execute on function public.complete_sentence_ticket(uuid, jsonb, integer) from public, anon, authenticated;
+revoke execute on function public.increment_mw_lookup(uuid, date)               from public, anon, authenticated;
 grant  execute on function public.claim_sentence_tickets(integer, integer)      to service_role;
 grant  execute on function public.complete_sentence_ticket(uuid, jsonb, integer) to service_role;
+grant  execute on function public.increment_mw_lookup(uuid, date)               to service_role;
 
 commit;
