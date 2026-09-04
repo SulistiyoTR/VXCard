@@ -25,8 +25,8 @@ const STEPS = [
 function Step({ n, img, title, body }: { n: number } & (typeof STEPS)[number]) {
   return (
     <div className="space-y-2.5">
-      {/* eslint-disable-next-line @next/next/no-img-element -- decorative onboarding art */}
       {/* Art is light line-work: invert it on the white ground, leave it alone in dark. */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- decorative onboarding art */}
       <img src={img} alt="" className="mx-auto block h-11 w-auto opacity-70 invert dark:invert-0" />
       <div className="flex items-center gap-3">
         <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full border border-border-strong text-text-faint">

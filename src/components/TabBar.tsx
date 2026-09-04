@@ -21,13 +21,20 @@ export function TabBar() {
               key={t.href}
               href={t.href}
               aria-current={active ? "page" : undefined}
-              className={`relative flex flex-1 justify-center py-3.5 text-[11px] font-semibold uppercase tracking-[0.14em] ${
+              className={`relative flex flex-1 items-center justify-center py-3.5 text-[11px] font-semibold uppercase tracking-[0.14em] ${
                 active ? "text-text" : "text-text-faint"
               }`}
             >
               {active && (
                 <span className="absolute inset-x-[38%] -top-px h-0.5 bg-accent" aria-hidden />
               )}
+              {/* Invisible hit-area expander: stretches the tap target down across
+                  the safe-area strip (dead space today) without moving the label
+                  or changing the bar's look. */}
+              <span
+                className="absolute inset-x-0 top-0 bottom-[calc(-1*max(1rem,env(safe-area-inset-bottom)))]"
+                aria-hidden
+              />
               {t.label}
             </Link>
           );
