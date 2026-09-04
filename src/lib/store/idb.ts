@@ -20,6 +20,8 @@ interface VXDB extends DBSchema {
   sessionDirty: { key: string; value: { id: string } };
   /** `word_id`s of cards removed locally (card only — shared content stays), awaiting a push. */
   cardTombstone: { key: string; value: { id: string } };
+  /** "Change this sentence" global hide_count bumps awaiting a push. Keyed `word_id:index`. */
+  hideOutbox: { key: string; value: { id: string; word_id: string; index: number } };
   meta: { key: string; value: unknown };
 }
 
@@ -27,20 +29,25 @@ let promise: Promise<IDBPDatabase<VXDB>> | null = null;
 
 export function db(): Promise<IDBPDatabase<VXDB>> {
   if (!promise) {
-    promise = openDB<VXDB>("vxcard", 2, {
-      upgrade(d) {
-        // v2 is a hard reset from the single-user schema. Wipe every store
-        // (including `meta`, so `seeded` clears) and let the app re-seed.
-        for (const name of Array.from(d.objectStoreNames)) d.deleteObjectStore(name);
-        d.createObjectStore("words", { keyPath: "id" });
-        d.createObjectStore("cards", { keyPath: "word_id" });
-        d.createObjectStore("sessions", { keyPath: "id" });
-        d.createObjectStore("reviews", { keyPath: "id" });
-        d.createObjectStore("reviewOutbox", { keyPath: "id" });
-        d.createObjectStore("cardDirty", { keyPath: "id" });
-        d.createObjectStore("sessionDirty", { keyPath: "id" });
-        d.createObjectStore("cardTombstone", { keyPath: "id" });
-        d.createObjectStore("meta");
+    promise = openDB<VXDB>("vxcard", 3, {
+      upgrade(d, oldVersion) {
+        if (oldVersion < 2) {
+          // v2 is a hard reset from the single-user schema. Wipe every store
+          // (including `meta`, so `seeded` clears) and let the app re-seed.
+          for (const name of Array.from(d.objectStoreNames)) d.deleteObjectStore(name);
+          d.createObjectStore("words", { keyPath: "id" });
+          d.createObjectStore("cards", { keyPath: "word_id" });
+          d.createObjectStore("sessions", { keyPath: "id" });
+          d.createObjectStore("reviews", { keyPath: "id" });
+          d.createObjectStore("reviewOutbox", { keyPath: "id" });
+          d.createObjectStore("cardDirty", { keyPath: "id" });
+          d.createObjectStore("sessionDirty", { keyPath: "id" });
+          d.createObjectStore("cardTombstone", { keyPath: "id" });
+          d.createObjectStore("meta");
+        }
+        if (oldVersion < 3) {
+          d.createObjectStore("hideOutbox", { keyPath: "id" });
+        }
       },
     });
   }

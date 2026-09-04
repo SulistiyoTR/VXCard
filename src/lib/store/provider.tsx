@@ -1,12 +1,14 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import type { Review, SessionRow, Word } from "@/lib/types";
+import type { Review, SessionRow, Word, WordContent } from "@/lib/types";
 import { useOnline } from "@/lib/useOnline";
 import {
   addCardLocal,
+  bumpSentenceUsageLocal,
   deleteCardLocal,
   enqueueReview,
+  hideSentenceLocal,
   isSeeded,
   loadDeck,
   loadReviews,
@@ -20,13 +22,20 @@ export interface AppData {
   ready: boolean;
   online: boolean;
   syncing: boolean;
+  /** First name from the Google profile, for the Home greeting. Null if none. */
+  firstName: string | null;
   deck: Word[];
   sessions: SessionRow[];
   reviews: Review[];
   refresh: () => Promise<void>;
-  addWord: (word: Word) => Promise<void>;
+  /** Add flow: `content` is the shared row already persisted server-side. */
+  addWord: (content: WordContent) => Promise<void>;
   patchWord: (id: string, patch: Partial<Word>) => Promise<void>;
   removeWord: (id: string) => Promise<void>;
+  /** Bump `sentence_usage[index]` when a level 3/4 sentence is shown (SPEC 1.6). */
+  bumpSentenceUsage: (wordId: string, index: number) => Promise<void>;
+  /** "Change this sentence": hide it for this user + queue the global hide_count bump. */
+  hideSentence: (wordId: string, index: number) => Promise<void>;
   recordReview: (review: Review) => Promise<void>;
   upsertSession: (session: SessionRow) => Promise<void>;
 }
@@ -36,9 +45,11 @@ const Ctx = createContext<AppData | null>(null);
 export function AppDataProvider({
   children,
   snapshot,
+  firstName = null,
 }: {
   children: React.ReactNode;
   snapshot: { deck: Word[]; sessions: SessionRow[] };
+  firstName?: string | null;
 }) {
   const online = useOnline();
   const [ready, setReady] = useState(false);
@@ -105,8 +116,8 @@ export function AppDataProvider({
   }, [online, ready, refresh]);
 
   const addWord = useCallback(
-    async (word: Word) => {
-      await addCardLocal(word);
+    async (content: WordContent) => {
+      await addCardLocal(content);
       await reload();
       void refresh();
     },
@@ -125,6 +136,24 @@ export function AppDataProvider({
   const removeWord = useCallback(
     async (id: string) => {
       await deleteCardLocal(id);
+      await reload();
+      void refresh();
+    },
+    [reload, refresh],
+  );
+
+  // Usage isn't rendered anywhere, so skip the reload — just persist + queue sync.
+  const bumpSentenceUsage = useCallback(
+    async (wordId: string, index: number) => {
+      await bumpSentenceUsageLocal(wordId, index);
+      void refresh();
+    },
+    [refresh],
+  );
+
+  const hideSentence = useCallback(
+    async (wordId: string, index: number) => {
+      await hideSentenceLocal(wordId, index);
       await reload();
       void refresh();
     },
@@ -151,6 +180,7 @@ export function AppDataProvider({
         ready,
         online,
         syncing,
+        firstName,
         deck,
         sessions,
         reviews,
@@ -158,6 +188,8 @@ export function AppDataProvider({
         addWord,
         patchWord,
         removeWord,
+        bumpSentenceUsage,
+        hideSentence,
         recordReview,
         upsertSession,
       }}

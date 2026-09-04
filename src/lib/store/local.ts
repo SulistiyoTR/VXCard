@@ -1,7 +1,8 @@
 "use client";
 
+import { addDays, today } from "@/lib/date";
 import { db } from "./idb";
-import { joinWord, splitWord } from "./shape";
+import { joinWord } from "./shape";
 import {
   CARD_FIELDS,
   type Review,
@@ -83,9 +84,28 @@ export async function putServerSessions(sessions: SessionRow[]): Promise<void> {
 
 /* ------------------------------------------------------ writes (local op) */
 
-/** Add flow: cache the shared content and create a dirty card pointing at it. */
-export async function addCardLocal(word: Word): Promise<void> {
-  const { content, card } = splitWord(word);
+/**
+ * Add flow (SPEC 1.1 step 4): cache the shared content (already persisted
+ * server-side) and create a fresh dirty card for this user pointing at it.
+ * New word = level 1, due tomorrow (SPEC 3.4).
+ */
+export async function addCardLocal(content: WordContent): Promise<void> {
+  const now = new Date().toISOString();
+  const card: UserCard = {
+    id: crypto.randomUUID(),
+    user_id: "", // filled by the sync POST
+    word_id: content.id,
+    level: 1,
+    streak: 0,
+    due_date: addDays(today(), 1),
+    lapse_count: 0,
+    last_seen_date: null,
+    sentence_usage: [],
+    hidden_sentences: [],
+    review_count: 0,
+    created_at: now,
+    updated_at: now,
+  };
   const d = await db();
   const tx = d.transaction(["words", "cards", "cardDirty"], "readwrite");
   await Promise.all([
@@ -116,6 +136,46 @@ export async function patchCardLocal(
   return getWordLocal(wordId);
 }
 
+/**
+ * Bump `sentence_usage[index]` for this user's card — called when a level 3/4
+ * sentence is *shown* (SPEC 1.6). Grows the array with zeros as needed, stamps
+ * updated_at, marks dirty. Race-free: one read-modify-write on the live card.
+ */
+export async function bumpSentenceUsageLocal(
+  wordId: string,
+  index: number,
+): Promise<void> {
+  const d = await db();
+  const card = await d.get("cards", wordId);
+  if (!card) return;
+  const usage = [...(card.sentence_usage ?? [])];
+  while (usage.length <= index) usage.push(0);
+  usage[index] += 1;
+  await d.put("cards", { ...card, sentence_usage: usage, updated_at: new Date().toISOString() });
+  await d.put("cardDirty", { id: wordId });
+}
+
+/**
+ * "Change this sentence" (SPEC 1.6): hide index for this user (syncs via the
+ * card) and queue the global hide_count bump (`hideOutbox`). No-op if already
+ * hidden.
+ */
+export async function hideSentenceLocal(wordId: string, index: number): Promise<void> {
+  const d = await db();
+  const card = await d.get("cards", wordId);
+  if (!card) return;
+  const hidden = card.hidden_sentences ?? [];
+  if (!hidden.includes(index)) {
+    await d.put("cards", {
+      ...card,
+      hidden_sentences: [...hidden, index],
+      updated_at: new Date().toISOString(),
+    });
+    await d.put("cardDirty", { id: wordId });
+  }
+  await enqueueHide(wordId, index);
+}
+
 /** Remove this user's card for a word. Shared content is left in the cache. */
 export async function deleteCardLocal(wordId: string): Promise<void> {
   const d = await db();
@@ -140,7 +200,17 @@ export async function upsertSessionLocal(session: SessionRow): Promise<void> {
   await d.put("sessionDirty", { id: session.id });
 }
 
+/** Queue a global hide_count bump for one sentence. De-duped by (word, index). */
+export async function enqueueHide(wordId: string, index: number): Promise<void> {
+  await (await db()).put("hideOutbox", { id: `${wordId}:${index}`, word_id: wordId, index });
+}
+
 /* --------------------------------------------------------- outbox access */
+
+export interface HideEntry {
+  word_id: string;
+  index: number;
+}
 
 export interface Outbox {
   reviews: Review[];
@@ -148,15 +218,17 @@ export interface Outbox {
   sessions: SessionRow[];
   /** `word_id`s of removed cards. */
   deletions: string[];
+  hides: HideEntry[];
 }
 
 export async function readOutbox(): Promise<Outbox> {
   const d = await db();
-  const [reviews, dirtyCardIds, dirtySessionIds, tombstones] = await Promise.all([
+  const [reviews, dirtyCardIds, dirtySessionIds, tombstones, hideRows] = await Promise.all([
     d.getAll("reviewOutbox"),
     d.getAllKeys("cardDirty"),
     d.getAllKeys("sessionDirty"),
     d.getAllKeys("cardTombstone"),
+    d.getAll("hideOutbox"),
   ]);
   const cards = (await Promise.all(dirtyCardIds.map((id) => d.get("cards", id)))).filter(
     (c): c is UserCard => Boolean(c),
@@ -164,7 +236,8 @@ export async function readOutbox(): Promise<Outbox> {
   const sessions = (await Promise.all(dirtySessionIds.map((id) => d.get("sessions", id)))).filter(
     (s): s is SessionRow => Boolean(s),
   );
-  return { reviews, cards, sessions, deletions: tombstones as string[] };
+  const hides = hideRows.map(({ word_id, index }) => ({ word_id, index }));
+  return { reviews, cards, sessions, deletions: tombstones as string[], hides };
 }
 
 /** Clear exactly the entries that were successfully pushed (not a blind clear). */
@@ -173,10 +246,11 @@ export async function clearOutbox(sent: {
   cardWordIds: string[];
   sessionIds: string[];
   deletions: string[];
+  hides: HideEntry[];
 }): Promise<void> {
   const d = await db();
   const tx = d.transaction(
-    ["reviewOutbox", "cardDirty", "sessionDirty", "cardTombstone"],
+    ["reviewOutbox", "cardDirty", "sessionDirty", "cardTombstone", "hideOutbox"],
     "readwrite",
   );
   await Promise.all([
@@ -184,6 +258,7 @@ export async function clearOutbox(sent: {
     ...sent.cardWordIds.map((id) => tx.objectStore("cardDirty").delete(id)),
     ...sent.sessionIds.map((id) => tx.objectStore("sessionDirty").delete(id)),
     ...sent.deletions.map((id) => tx.objectStore("cardTombstone").delete(id)),
+    ...sent.hides.map((h) => tx.objectStore("hideOutbox").delete(`${h.word_id}:${h.index}`)),
   ]);
   await tx.done;
 }

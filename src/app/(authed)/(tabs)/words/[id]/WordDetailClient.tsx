@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
-import { regenerateSentence } from "@/lib/actions";
 import { addDays, daysBetween, today } from "@/lib/date";
 import { useAppData } from "@/lib/store/provider";
 import type { Word } from "@/lib/types";
@@ -12,7 +11,7 @@ import { Speak } from "@/components/Speak";
 
 export function WordDetailClient({ word }: { word: Word }) {
   const router = useRouter();
-  const { patchWord, removeWord, online } = useAppData();
+  const { patchWord, removeWord, hideSentence } = useAppData();
   const [menu, setMenu] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -22,18 +21,18 @@ export function WordDetailClient({ word }: { word: Word }) {
 
   const days = daysBetween(today(), word.due_date);
   const nextLabel = days <= 0 ? "now" : days === 1 ? "tomorrow" : `in ${days} days`;
-  const visible = showAll ? word.sentences : word.sentences.slice(0, 2);
 
-  async function regen(i: number) {
-    setBusyIdx(i);
+  // Sentences this user still sees: not flagged out globally, not hidden by them.
+  const available = word.sentences
+    .map((s, idx) => ({ s, idx }))
+    .filter(({ s, idx }) => !s.flagged && !word.hidden_sentences.includes(idx));
+  const visible = showAll ? available : available.slice(0, 2);
+
+  // "Change this sentence" (SPEC 1.6): hide for this user + queue the global bump.
+  async function hide(idx: number) {
+    setBusyIdx(idx);
     try {
-      const fresh = await regenerateSentence({
-        word: word.word,
-        pos: word.pos,
-        definition: word.definition,
-      });
-      const sentences = word.sentences.map((x, idx) => (idx === i ? fresh : x));
-      await patchWord(word.id, { sentences });
+      await hideSentence(word.id, idx);
     } finally {
       setBusyIdx(null);
     }
@@ -51,17 +50,25 @@ export function WordDetailClient({ word }: { word: Word }) {
 
   return (
     <Screen className="px-5 pb-10">
-      <div className="flex items-center justify-between py-4">
-        <button onClick={() => router.back()} className="text-text-dim">
+      <div className="flex items-center justify-between py-2">
+        <button
+          onClick={() => router.back()}
+          aria-label="Back"
+          className="press -ml-2 flex h-10 w-10 items-center justify-center text-lg text-text-dim"
+        >
           ←
         </button>
-        <button onClick={() => setMenu((v) => !v)} className="text-text-dim text-xl">
+        <button
+          onClick={() => setMenu((v) => !v)}
+          aria-label="Word options"
+          className="press -mr-2 flex h-10 w-10 items-center justify-center text-xl text-text-dim"
+        >
           ⋯
         </button>
       </div>
 
       {menu && (
-        <div className="mb-4 space-y-1 rounded-2xl border border-border bg-surface p-2 text-sm">
+        <div className="mb-4 space-y-1 rounded-[var(--r-input)] border border-border bg-surface p-2 text-sm">
           <button
             className="w-full rounded-xl px-3 py-2 text-left text-bad active:bg-surface-2"
             onClick={() => {
@@ -80,7 +87,7 @@ export function WordDetailClient({ word }: { word: Word }) {
         </div>
       )}
 
-      <div className="text-3xl font-bold">{word.word}</div>
+      <div className="font-serif text-[28px] font-medium tracking-[-0.01em]">{word.word}</div>
       {word.phonetic && (
         <div className="flex items-center gap-1 text-text-dim">
           <span className="font-mono text-sm">{word.phonetic}</span>
@@ -88,7 +95,7 @@ export function WordDetailClient({ word }: { word: Word }) {
         </div>
       )}
 
-      <div className="mt-3 text-sm text-text-faint">{word.pos}</div>
+      <div className="mt-3 font-serif text-[15px] italic text-text-faint">{word.pos}</div>
       <div>{word.definition}</div>
 
       {word.other_meanings.length > 0 && (
@@ -118,30 +125,35 @@ export function WordDetailClient({ word }: { word: Word }) {
       )}
 
       <div className="my-5 h-px bg-border" />
-      <div className="text-sm uppercase tracking-wide text-text-faint">Examples</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+        Examples
+      </div>
       <ul className="mt-2 space-y-3">
-        {visible.map((s, i) => (
-          <li key={i} className="flex items-start justify-between gap-3">
+        {visible.map(({ s, idx }) => (
+          <li key={idx} className="flex items-start justify-between gap-3">
             <span className="italic text-text-dim">&ldquo;{s.text}&rdquo;</span>
             <button
-              onClick={() => regen(i)}
-              disabled={busyIdx === i || !online}
-              title={online ? "Regenerate" : "Needs a connection"}
+              onClick={() => hide(idx)}
+              disabled={busyIdx === idx}
+              title="Hide this sentence"
               className="shrink-0 text-accent disabled:opacity-30"
             >
-              {busyIdx === i ? "…" : "✎"}
+              {busyIdx === idx ? "…" : "✎"}
             </button>
           </li>
         ))}
+        {visible.length === 0 && <li className="text-sm text-text-faint">No example sentences.</li>}
       </ul>
-      {word.sentences.length > 2 && !showAll && (
+      {available.length > 2 && !showAll && (
         <button className="mt-2 text-sm text-accent" onClick={() => setShowAll(true)}>
-          (+{word.sentences.length - 2} more)
+          (+{available.length - 2} more)
         </button>
       )}
 
       <div className="my-5 h-px bg-border" />
-      <div className="text-sm uppercase tracking-wide text-text-faint">Progress</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+        Progress
+      </div>
       <div className="mt-2 space-y-1 text-sm">
         <div>
           <LevelDots level={word.level} streak={word.streak} />
@@ -154,15 +166,18 @@ export function WordDetailClient({ word }: { word: Word }) {
 
       {confirm && (
         <div className="fixed inset-0 z-20 flex items-end bg-black/60 p-5 safe-b">
-          <div className="w-full rounded-3xl border border-border bg-surface p-5">
-            <p className="font-semibold">Delete &ldquo;{word.word}&rdquo;?</p>
+          <div className="edge w-full rounded-[var(--r-card)] border border-border bg-surface p-5">
+            <p className="font-serif text-xl font-medium">Delete &ldquo;{word.word}&rdquo;?</p>
             <p className="mt-1 text-sm text-text-dim">This can&rsquo;t be undone.</p>
             <div className="mt-4 flex gap-2">
-              <button className="flex-1 rounded-2xl bg-surface-2 py-3" onClick={() => setConfirm(false)}>
+              <button
+                className="flex-1 rounded-[var(--r-control)] bg-surface-2 py-3"
+                onClick={() => setConfirm(false)}
+              >
                 Cancel
               </button>
               <button
-                className="flex-1 rounded-2xl bg-bad/20 py-3 text-bad"
+                className="flex-1 rounded-[var(--r-control)] bg-bad/20 py-3 text-bad"
                 onClick={async () => {
                   await removeWord(word.id);
                   router.push("/words");

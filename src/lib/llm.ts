@@ -55,18 +55,19 @@ async function ask(system: string, user: string, maxTokens: number): Promise<str
 const JSON_ONLY = "Respond with pure JSON only — no prose, no code fences.";
 
 /**
- * Call A (SPEC 1.3): 5 example sentences, varied contexts, target mid-sentence,
- * 10–20 words, with the inflected `form` used.
+ * Call A (SPEC 1.3): example sentences, varied contexts, target mid-sentence,
+ * 10–20 words, with the inflected `form` used. Defaults to `SENTENCES_PER_WORD`;
+ * the ticket system passes a smaller `count` and the existing texts to `avoid`.
  */
-export async function generateSentences(input: {
-  word: string;
-  pos: string;
-  definition: string;
-}): Promise<Sentence[]> {
+export async function generateSentences(
+  input: { word: string; pos: string; definition: string },
+  opts: { count?: number; avoid?: string[] } = {},
+): Promise<Sentence[]> {
+  const count = opts.count ?? CONFIG.SENTENCES_PER_WORD;
   const system = [
     "You write natural example sentences that teach an English word in context.",
     "Rules:",
-    `- Produce exactly ${CONFIG.SENTENCES_PER_WORD} sentences.`,
+    `- Produce exactly ${count} sentences.`,
     "- Each sentence 10–20 words.",
     "- The target word appears in the MIDDLE of the sentence, never the first word.",
     "- Every sentence a genuinely different context — not restatements of one idea.",
@@ -75,12 +76,17 @@ export async function generateSentences(input: {
     'Schema: {"sentences":[{"text": string, "form": string}]}',
   ].join("\n");
 
-  const user = `word: ${input.word}\npos: ${input.pos}\ndefinition: ${input.definition}`;
+  const avoid = opts.avoid?.length
+    ? `\n\nDo NOT reuse the contexts of these existing sentences:\n${opts.avoid
+        .map((t) => `- ${t}`)
+        .join("\n")}`
+    : "";
+  const user = `word: ${input.word}\npos: ${input.pos}\ndefinition: ${input.definition}${avoid}`;
   const parsed = parseJson<{ sentences: { text: string; form?: string }[] }>(
-    await ask(system, user, 900),
+    await ask(system, user, 200 + count * 140),
   );
 
-  return parsed.sentences.slice(0, CONFIG.SENTENCES_PER_WORD).map((s) => ({
+  return parsed.sentences.slice(0, count).map((s) => ({
     text: s.text.trim(),
     form: (s.form || input.word).trim(),
     hide_count: 0,

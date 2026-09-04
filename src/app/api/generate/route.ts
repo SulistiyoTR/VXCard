@@ -1,17 +1,16 @@
-import { CONFIG } from "@/lib/config";
-import { errMessage, normalizeInput, runGenerate } from "@/lib/generate";
+import { searchWord } from "@/lib/addWord";
 import { lookupWord, probeDictionary } from "@/lib/dictionary";
+import { errMessage } from "@/lib/generate";
 import { pingLLM } from "@/lib/llm";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 30;
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/generate — diagnostics. Shows the function region, which config is
- * live, and whether each upstream (both dictionaries + Anthropic) is reachable.
- * Auth-gated.
+ * GET /api/generate — diagnostics. Function region + whether each upstream
+ * (Merriam-Webster + Anthropic) is reachable. Auth-gated.
  */
 export async function GET() {
   const supabase = await createClient();
@@ -33,7 +32,6 @@ export async function GET() {
     {
       region: process.env.VERCEL_REGION ?? "local",
       config: {
-        DICTIONARY_PRIMARY: process.env.DICTIONARY_PRIMARY ?? "(unset)",
         MERRIAM_WEBSTER_KEY: process.env.MERRIAM_WEBSTER_KEY ? "set" : "MISSING",
         ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL ?? "(default)",
       },
@@ -45,15 +43,11 @@ export async function GET() {
 }
 
 /**
- * POST /api/generate  { "word": "explicable" }
+ * POST /api/generate  { "word": "explicable" }  — search step (SPEC 1.1).
  *
- * Responds with a Server-Sent Events stream so the Add-word screen can show
- * progress. Events (one JSON object per `data:` line):
- *   { "type": "stage",  "stage": "lookup" | "sentences" | "distractors" }
- *   { "type": "result", "result": { "status": "ok" | "duplicate" | "not_found"
- *        | "suggestion" | "phrase" | "rate_limited" | "error", ... } }
- *
- * The Anthropic key never leaves this handler.
+ * Checks the shared `words` table first; only calls Merriam-Webster for a
+ * genuinely new word, rate-limited to CONFIG.DAILY_NEW_WORD_LIMIT lookups per
+ * user per day. No LLM here — that waits for POST /api/generate/save.
  */
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -70,58 +64,12 @@ export async function POST(request: Request) {
   }
   const raw = typeof body.word === "string" ? body.word : "";
   if (!raw.trim()) return new Response("bad_request", { status: 400 });
-  const word = normalizeInput(raw);
 
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (obj: unknown) =>
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
-
-      try {
-        // Duplicate check (SPEC 1.1 / 4.3).
-        const { data: existing } = await supabase
-          .from("words")
-          .select("id, word, level, streak, due_date")
-          .eq("user_id", user.id)
-          .eq("word", word)
-          .maybeSingle();
-        if (existing) {
-          send({ type: "result", result: { status: "duplicate", word: existing } });
-          return;
-        }
-
-        // Daily rate limit (SPEC 5.6).
-        const startOfDay = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
-        const { count } = await supabase
-          .from("words")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .gte("created_at", startOfDay);
-        if ((count ?? 0) >= CONFIG.DAILY_NEW_WORD_LIMIT) {
-          send({
-            type: "result",
-            result: { status: "rate_limited", limit: CONFIG.DAILY_NEW_WORD_LIMIT },
-          });
-          return;
-        }
-
-        const result = await runGenerate(word, (stage) => send({ type: "stage", stage }));
-        send({ type: "result", result });
-      } catch (err) {
-        console.error("[generate] unexpected", err);
-        send({ type: "result", result: { status: "error", detail: errMessage(err) } });
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "content-type": "text/event-stream; charset=utf-8",
-      "cache-control": "no-cache, no-transform",
-      "x-accel-buffering": "no",
-    },
-  });
+  try {
+    const result = await searchWord(raw, user.id);
+    return Response.json(result, { headers: { "cache-control": "no-store" } });
+  } catch (err) {
+    console.error("[generate] search failed", err);
+    return Response.json({ status: "error", detail: errMessage(err) });
+  }
 }

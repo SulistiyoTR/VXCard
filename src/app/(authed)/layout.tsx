@@ -1,4 +1,4 @@
-import { getDeck, getSessions } from "@/lib/data";
+import { getDeck, getFirstName, getSessions } from "@/lib/data";
 import { AppDataProvider } from "@/lib/store/provider";
 import type { SessionRow, Word } from "@/lib/types";
 
@@ -11,10 +11,15 @@ export const dynamic = "force-dynamic";
 export default async function AuthedLayout({ children }: { children: React.ReactNode }) {
   let deck: Word[] = [];
   let sessions: SessionRow[] = [];
+  let firstName: string | null = null;
   try {
-    [deck, sessions] = await Promise.all([getDeck(), getSessions()]);
+    [deck, sessions, firstName] = await Promise.all([getDeck(), getSessions(), getFirstName()]);
   } catch {
     // Offline SSR / transient error — the store seeds from IndexedDB or a later sync.
   }
-  return <AppDataProvider snapshot={{ deck, sessions }}>{children}</AppDataProvider>;
+  return (
+    <AppDataProvider snapshot={{ deck, sessions }} firstName={firstName}>
+      {children}
+    </AppDataProvider>
+  );
 }

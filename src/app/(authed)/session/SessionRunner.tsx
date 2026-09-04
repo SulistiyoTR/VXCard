@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { regenerateSentence } from "@/lib/actions";
 import { CONFIG } from "@/lib/config";
 import { daysBetween, today } from "@/lib/date";
 import { buildQuestion, hintBudget, hintMask, matchTyped, nextHintPosition, quizLevel, type Question } from "@/lib/quiz";
@@ -55,7 +54,7 @@ export function SessionRunner({
   hardMode: boolean;
 }) {
   const router = useRouter();
-  const { patchWord, recordReview, upsertSession } = useAppData();
+  const { patchWord, recordReview, upsertSession, bumpSentenceUsage } = useAppData();
   const planned = initialEntries.length;
 
   const sessionRef = useRef<SessionRow>(
@@ -76,8 +75,43 @@ export function SessionRunner({
   }, [upsertSession]);
   const demotionsRef = useRef(0);
   const requeued = useRef<Set<string>>(new Set());
+  const usageBumped = useRef<Set<number>>(new Set());
+  const ticketsRan = useRef(false);
 
   const entry = queue[pos];
+
+  // `sentence_usage` goes up when a level 3/4 sentence is *shown* (SPEC 1.6),
+  // not when it's answered — so this fires once per queue position.
+  useEffect(() => {
+    if (phase !== "question" || !entry) return;
+    const idx = entry.question.sentenceIndex;
+    if (idx == null || usageBumped.current.has(pos)) return;
+    usageBumped.current.add(pos);
+    void bumpSentenceUsage(entry.item.word.id, idx);
+  }, [pos, phase, entry, bumpSentenceUsage]);
+
+  // After the results screen renders, kick the sentence-pool ticket system in
+  // the background (SPEC 1.6 / UPDATE-PLAN Sesi 5). Fire-and-forget — the
+  // results screen never waits on it.
+  useEffect(() => {
+    if (phase !== "done" || ticketsRan.current) return;
+    ticketsRan.current = true;
+    // Words whose sentence pool was actually touched this session — i.e. a cloze
+    // question was built for them (levels 3-4, or Hard Mode).
+    const wordIds = [
+      ...new Set(
+        outcomes
+          .filter((o) => o.entry.question.sentenceIndex != null)
+          .map((o) => o.entry.item.word.id),
+      ),
+    ];
+    if (wordIds.length === 0) return;
+    void fetch("/api/tickets/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ word_ids: wordIds }),
+    }).catch(() => {});
+  }, [phase, outcomes]);
 
   const persistSession = useCallback(
     (answered: number, completed: boolean) => {
@@ -224,6 +258,8 @@ export function SessionRunner({
     setQuitEarly(false);
     demotionsRef.current = 0;
     requeued.current = new Set();
+    usageBumped.current = new Set();
+    ticketsRan.current = false;
     startRef.current = Date.now();
     setPhase("question");
   }
@@ -279,7 +315,7 @@ export function SessionRunner({
 
       {showQuit && (
         <div className="fixed inset-0 z-20 flex items-end bg-black/60 p-5 safe-b">
-          <div className="edge w-full rounded-3xl border border-border bg-surface p-5">
+          <div className="edge w-full rounded-[var(--r-card)] border border-border bg-surface p-5">
             <p className="font-serif text-xl font-medium">Quit session?</p>
             <p className="mt-1 text-sm text-text-dim">
               Your {answered} answers are saved, but your streak won&rsquo;t count today.
@@ -385,7 +421,7 @@ function QuestionView({
               autoCapitalize="off"
               spellCheck={false}
               enterKeyHint="done"
-              className="w-full rounded-[14px] border border-border bg-surface px-4 py-4 text-center font-serif text-[22px] outline-none focus:border-accent"
+              className="w-full rounded-[var(--r-input)] border border-border bg-surface px-4 py-4 text-center font-serif text-[22px] outline-none focus:border-accent"
             />
             <div className="flex gap-2.5">
               <Button
@@ -439,19 +475,20 @@ function QuestionView({
 
 /* ---------------------------------------------------------------- Feedback */
 
+// Informative, never punishing (SPEC §2) — a miss reads in dimmed text, not red.
 function topLine(o: Outcome): { icon: string; text: string; className: string } {
   const secs = (o.durationMs / 1000).toFixed(1);
   switch (o.result) {
     case "correct":
-      return { icon: "✅", text: `Correct · ${secs}s`, className: "text-good" };
+      return { icon: "✓", text: `Correct · ${secs}s`, className: "text-good" };
     case "slow":
       return o.helpUsed > 0
-        ? { icon: "🐢", text: `Correct, used ${o.helpUsed} hint${o.helpUsed > 1 ? "s" : ""}`, className: "text-slow" }
-        : { icon: "🐢", text: `Correct, but slow · ${secs}s`, className: "text-slow" };
+        ? { icon: "~", text: `Correct, used ${o.helpUsed} hint${o.helpUsed > 1 ? "s" : ""}`, className: "text-slow" }
+        : { icon: "~", text: `Correct, but slow · ${secs}s`, className: "text-slow" };
     case "wrong":
-      return { icon: "❌", text: "Wrong", className: "text-bad" };
+      return { icon: "✕", text: "Not quite", className: "text-text-dim" };
     case "dontknow":
-      return { icon: "⬜", text: "Not yet — that's fine", className: "text-text-dim" };
+      return { icon: "○", text: "Not yet — that's fine", className: "text-text-dim" };
   }
 }
 
@@ -465,32 +502,28 @@ function FeedbackView({
   onContinue: () => void;
 }) {
   const word = outcome.entry.item.word;
-  const { patchWord, online } = useAppData();
-  const [sentences, setSentences] = useState(word.sentences);
-  const [regenerating, setRegenerating] = useState(false);
+  const { hideSentence } = useAppData();
+  const [hidden, setHidden] = useState(false);
+  const [busy, setBusy] = useState(false);
   const line = topLine(outcome);
 
   const shownIndex = outcome.entry.question.sentenceIndex ?? 0;
-  const shownSentence = sentences[shownIndex] ? [sentences[shownIndex]] : sentences.slice(0, 1);
+  const shown = word.sentences[shownIndex];
+  const shownSentence = shown ? [shown] : word.sentences.slice(0, 1);
 
   const days = daysBetween(today(), outcome.newState.due_date);
   const dueLabel = days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
 
+  // "Change this sentence" (SPEC 1.6): hide for this user + queue the global
+  // hide_count bump. The pool is append-only — nothing is regenerated.
   async function changeSentence() {
-    setRegenerating(true);
+    if (!shown || hidden) return;
+    setBusy(true);
     try {
-      const fresh = await regenerateSentence({
-        word: word.word,
-        pos: word.pos,
-        definition: word.definition,
-      });
-      const updated = sentences.map((x, i) => (i === shownIndex ? fresh : x));
-      setSentences(updated);
-      await patchWord(word.id, { sentences: updated });
-    } catch {
-      /* ignore */
+      await hideSentence(word.id, shownIndex);
+      setHidden(true);
     } finally {
-      setRegenerating(false);
+      setBusy(false);
     }
   }
 
@@ -500,7 +533,12 @@ function FeedbackView({
         {line.icon} {line.text}
       </div>
       {outcome.result === "wrong" && outcome.typedAnswer && (
-        <div className="mt-1 text-sm text-text-dim">Your answer: {outcome.typedAnswer}</div>
+        <div className="mt-1 text-sm text-text-dim">
+          Your answer:{" "}
+          <span className="underline decoration-text-faint underline-offset-2">
+            {outcome.typedAnswer}
+          </span>
+        </div>
       )}
       {outcome.almost && (
         <div className="mt-1 text-sm text-slow">
@@ -527,17 +565,23 @@ function FeedbackView({
         <LevelIndicator oldLevel={outcome.oldLevel} newState={outcome.newState} />
         {!hardMode && <span className="text-text-dim">{dueLabel}</span>}
       </div>
-      <button
-        onClick={changeSentence}
-        disabled={regenerating || !online}
-        title={online ? undefined : "Needs a connection"}
-        className="mt-2 self-end text-[12.5px] text-accent disabled:opacity-40"
-      >
-        {regenerating ? "…" : "✎ change sentence"}
-      </button>
+      {shown &&
+        (hidden ? (
+          <span className="mt-2 self-end text-[12.5px] text-text-faint">
+            Hidden — you won&rsquo;t see this one again
+          </span>
+        ) : (
+          <button
+            onClick={changeSentence}
+            disabled={busy}
+            className="mt-2 self-end text-[12.5px] text-accent disabled:opacity-40"
+          >
+            {busy ? "…" : "✎ change sentence"}
+          </button>
+        ))}
 
       <div className="mt-auto pt-6 safe-b">
-        <Button onClick={onContinue}>Continue →</Button>
+        <Button onClick={onContinue}>Continue</Button>
       </div>
     </div>
   );
@@ -591,19 +635,18 @@ function CompleteView({
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 pt-16 safe-b">
       <div className="text-center">
-        <div className="text-5xl">✓</div>
-        <h1 className="mt-2 text-2xl font-bold">
+        <h1 className="font-serif text-[26px] font-medium tracking-[-0.01em]">
           {quitEarly ? "Session stopped" : "Session complete"}
         </h1>
       </div>
 
-      <div className="mt-6 flex justify-center gap-6 text-lg">
-        <span>✅ {good}</span>
-        <span>🐢 {slow}</span>
-        <span>❌ {bad}</span>
+      <div className="mt-6 flex justify-center gap-7 text-lg tabular-nums">
+        <span className="text-good">✓ {good}</span>
+        <span className="text-slow">~ {slow}</span>
+        <span className="text-text-dim">✕ {bad}</span>
       </div>
 
-      {allCorrect && <p className="mt-3 text-center text-good">Nice, all correct 🎉</p>}
+      {allCorrect && <p className="mt-3 text-center text-good">Nice — all correct</p>}
 
       {ups.length > 0 && (
         <Section title="Level up">
@@ -638,7 +681,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <div className="mt-6">
       <div className="my-3 h-px bg-border" />
-      <div className="text-sm uppercase tracking-wide text-text-faint">{title}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-faint">
+        {title}
+      </div>
       <div className="mt-2 space-y-1">{children}</div>
     </div>
   );
