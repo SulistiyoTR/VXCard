@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { daysBetween, today } from "@/lib/date";
 import { useLocalStorage } from "@/lib/useLocalStorage";
-import { PageTitle, Screen } from "@/components/ui";
+import { Dots, PageTitle, Screen } from "@/components/ui";
+import { IconCheck, IconSort } from "@/components/icons";
 
 interface Row {
   id: string;
@@ -28,10 +29,19 @@ function dueLabel(due: string): string {
   return `in ${d}d`;
 }
 
-function levelTag(level: number, streak: number): string {
-  if (level >= 5) return "✓";
+function LevelTag({ level, streak }: { level: number; streak: number }) {
+  if (level >= 5)
+    return (
+      <span className="inline-flex items-center gap-1 text-good">
+        <IconCheck />
+      </span>
+    );
   const target = ({ 1: 2, 2: 2, 3: 3, 4: 3 } as Record<number, number>)[level] ?? 3;
-  return `L${level} ${Array.from({ length: target }, (_, i) => (i < streak ? "●" : "○")).join("")}`;
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      L{level} <Dots filled={streak} total={target} />
+    </span>
+  );
 }
 
 export function WordsClient({ words }: { words: Row[] }) {
@@ -83,7 +93,7 @@ export function WordsClient({ words }: { words: Row[] }) {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`whitespace-nowrap rounded-full border px-3 py-1 text-sm ${
+            className={`whitespace-nowrap rounded-[3px] border px-3 py-1 text-sm ${
               filter === f ? "border-accent bg-accent/10" : "border-border text-text-dim"
             }`}
           >
@@ -96,9 +106,9 @@ export function WordsClient({ words }: { words: Row[] }) {
       <div className="flex justify-end px-5 py-2">
         <button
           onClick={() => setStoredSort(sort === "az" ? "new" : "az")}
-          className="text-sm text-text-dim"
+          className="inline-flex items-center gap-1.5 text-sm text-text-dim"
         >
-          ⇅ {sort === "az" ? "A–Z" : "Newest"}
+          <IconSort /> {sort === "az" ? "A–Z" : "Newest"}
         </button>
       </div>
 
@@ -112,7 +122,9 @@ export function WordsClient({ words }: { words: Row[] }) {
                 <div className="text-sm text-text-faint">{w.pos}</div>
               </div>
               <div className="text-right text-sm text-text-dim">
-                <div>{levelTag(w.level, w.streak)}</div>
+                <div className="flex justify-end">
+                  <LevelTag level={w.level} streak={w.streak} />
+                </div>
                 <div className="text-text-faint">{dueLabel(w.due_date)}</div>
               </div>
             </Link>

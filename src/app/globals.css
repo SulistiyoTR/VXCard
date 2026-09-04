@@ -1,39 +1,67 @@
 @import "tailwindcss";
 
 :root {
-  /* Committed to one visual world — a black home-screen PWA. No light theme. */
-  --bg: #0b0c0e;
-  --surface: #15171a;
-  --surface-2: #1d2024;
-  --surface-3: #282c31;
-  --border: #33373d;
-  --edge: rgba(255, 255, 255, 0.05); /* 1px top-lip that reads as "raised" in dark UI */
+  /* Broadsheet: white ground, square corners, NYT slate accent. Light is the
+     default; the dark palette lives in the media query below. Token names are
+     fixed — only values move between themes. */
+  --bg: #ffffff;
+  --surface: #f7f7f7;
+  --surface-2: #ebebeb;
+  --surface-3: #e0e0e0;
+  --border: #dfdfdf;
+  --border-strong: #121212; /* section rules, button outlines, quote bars */
+  --edge: transparent; /* the raised-lip trick only works on dark UI */
 
-  --text: #f2f3f5;
-  --text-dim: #9ca1a9;
-  --text-faint: #656b74;
+  --text: #121212; /* ink — never pure black */
+  --text-dim: #5a5a5a;
+  --text-faint: #727272;
 
-  --accent: #5c8cf0;
-  --accent-line: rgba(92, 140, 240, 0.45);
-  --accent-glow: rgba(92, 140, 240, 0.22);
+  --accent: #326891; /* NYT editorial blue */
+  --accent-line: rgba(50, 104, 145, 0.5);
+  --accent-glow: rgba(50, 104, 145, 0.12);
 
-  --good: #56d19a;
-  --slow: #f0b64a;
-  --bad: #ee6f6f; /* destructive actions only — the quiz never scolds in red (SPEC §2) */
+  --good: #267c30;
+  --slow: #e6540a; /* NYT "developing" orange — the palette has no amber */
+  --bad: #d0021b; /* breaking red — destructive actions only (SPEC §2) */
 
-  /* One radius scale — controls, inputs, cards. Chips stay fully round. */
-  --r-control: 12px;
-  --r-input: 16px;
-  --r-card: 20px;
+  /* Square-corner system. 3px is the largest radius anywhere; cards get none. */
+  --r-control: 3px;
+  --r-input: 3px;
+  --r-card: 0px;
 
-  /* One damped spring, three tempos — motion is information (SPEC 4.5/4.6). */
+  /* One damped spring, three tempos — motion is information (SPEC 4.5/4.6),
+     but dialled back: NYT moves very little. */
   --spring: linear(
     0, 0.006, 0.025, 0.101, 0.22, 0.363, 0.508, 0.637, 0.744, 0.827, 0.888,
     0.931, 0.961, 0.98, 0.991, 1.001, 1.002, 1.001, 1
   );
   --t-fast: 150ms;
-  --t-mod: 260ms;
-  --t-slow: 440ms;
+  --t-mod: 220ms;
+  --t-slow: 380ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121212;
+    --surface: #1e1e1e;
+    --surface-2: #262626;
+    --surface-3: #2f2f2f;
+    --border: #3a3a3a;
+    --border-strong: #f8f8f8;
+    --edge: rgba(255, 255, 255, 0.04);
+
+    --text: #f8f8f8;
+    --text-dim: #bbbbbb;
+    --text-faint: #8b8b8b;
+
+    --accent: #7ca7c8;
+    --accent-line: rgba(124, 167, 200, 0.5);
+    --accent-glow: rgba(124, 167, 200, 0.14);
+
+    --good: #63a859;
+    --slow: #f78145;
+    --bad: #e14e5b;
+  }
 }
 
 @theme inline {
@@ -42,6 +70,7 @@
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-text: var(--text);
   --color-text-dim: var(--text-dim);
   --color-text-faint: var(--text-faint);
@@ -87,7 +116,7 @@ button {
   box-shadow: inset 0 1px 0 var(--edge);
 }
 
-/* Press = scale down + surface lifts one level + weight shift, on the spring. */
+/* Press = a small give + weight shift. Restrained — the broadsheet barely moves. */
 .press {
   transition:
     transform var(--t-fast) var(--spring),
@@ -95,18 +124,18 @@ button {
     font-weight var(--t-fast) linear;
 }
 .press:active {
-  transform: scale(0.975);
+  transform: scale(0.985);
   font-weight: 600;
 }
 
 @keyframes slide-in {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateY(6px);
   }
 }
 .slide-in {
-  animation: slide-in var(--t-mod) var(--spring);
+  animation: slide-in var(--t-mod) ease-out;
 }
 
 /* ---- quiz answer options (SPEC 4.5) ---- */
@@ -114,7 +143,7 @@ button {
 .opt {
   border: 1px solid var(--border);
   border-radius: var(--r-input);
-  background: var(--surface-2);
+  background: var(--surface);
   box-shadow: inset 0 1px 0 var(--edge);
   padding: 14px 15px;
   font-weight: 500;
@@ -129,21 +158,20 @@ button {
     font-weight var(--t-fast) linear;
 }
 .opt:active {
-  transform: scale(0.985);
-  background: var(--surface-3);
+  transform: scale(0.99);
+  background: var(--surface-2);
   font-weight: 600;
 }
 .opt.chosen {
-  border-color: var(--accent-line);
-  background: var(--surface-3);
+  border-color: var(--accent);
+  background: var(--bg);
   font-weight: 600;
   box-shadow:
-    0 0 0 1px var(--accent-line),
-    0 0 22px -4px var(--accent-glow),
-    inset 0 1px 0 var(--edge);
+    inset 0 0 0 1px var(--accent),
+    0 0 6px -2px var(--accent-glow);
 }
 .options.decided .opt:not(.chosen) {
-  opacity: 0.32;
+  opacity: 0.4;
 }
 
 @media (prefers-reduced-motion: reduce) {

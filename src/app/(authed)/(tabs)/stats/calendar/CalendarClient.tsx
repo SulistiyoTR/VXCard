@@ -4,6 +4,15 @@ import { useMemo, useState } from "react";
 import { monthActivity } from "@/lib/statsCalc";
 import type { SessionRow } from "@/lib/types";
 import { BackTitle, Screen } from "@/components/ui";
+import { IconChevronLeft, IconChevronRight } from "@/components/icons";
+
+/** Session count → heat-square opacity (0 = empty). */
+function heat(sessions: number): number {
+  if (sessions >= 3) return 0.9;
+  if (sessions === 2) return 0.6;
+  if (sessions === 1) return 0.32;
+  return 0;
+}
 
 const WEEK = ["M", "T", "W", "T", "F", "S", "S"];
 const MONTH_NAMES = [
@@ -26,13 +35,6 @@ function daysInMonth(month: string): number {
 function firstWeekday(month: string): number {
   const [y, m] = month.split("-").map(Number);
   return (new Date(y, m - 1, 1).getDay() + 6) % 7;
-}
-
-function glyph(sessions: number): string {
-  if (sessions >= 3) return "▓";
-  if (sessions === 2) return "▒";
-  if (sessions === 1) return "░";
-  return "";
 }
 
 export function CalendarClient({
@@ -73,14 +75,24 @@ export function CalendarClient({
       <BackTitle href="/stats">Calendar</BackTitle>
 
       <div className="flex items-center justify-between py-2">
-        <button onClick={() => go(-1)} disabled={!canPrev} className="px-3 text-lg disabled:opacity-25">
-          ‹
+        <button
+          onClick={() => go(-1)}
+          disabled={!canPrev}
+          aria-label="Previous month"
+          className="px-3 text-xl text-text-dim disabled:opacity-25"
+        >
+          <IconChevronLeft />
         </button>
         <span>
           {MONTH_NAMES[m - 1]} {y}
         </span>
-        <button onClick={() => go(1)} disabled={!canNext} className="px-3 text-lg disabled:opacity-25">
-          ›
+        <button
+          onClick={() => go(1)}
+          disabled={!canNext}
+          aria-label="Next month"
+          className="px-3 text-xl text-text-dim disabled:opacity-25"
+        >
+          <IconChevronRight />
         </button>
       </div>
 
@@ -98,18 +110,24 @@ export function CalendarClient({
           const day = byDay.get(date);
           const isToday = date === todayISO;
           const isFuture = date > todayISO;
+          const o = heat(day?.sessions ?? 0);
           return (
             <button
               key={date}
               onClick={() => setSelected(date)}
-              className={`flex aspect-square flex-col items-center justify-center rounded-lg text-[10px] ${
+              className={`flex aspect-square flex-col items-center justify-center gap-1 text-[10px] ${
                 isToday ? "border border-accent" : ""
               } ${selected === date ? "bg-surface-2" : ""}`}
             >
               <span className="text-text-faint">{i + 1}</span>
-              <span className="text-sm leading-none">
-                {isFuture ? <span className="text-text-faint">·</span> : glyph(day?.sessions ?? 0)}
-              </span>
+              {isFuture ? (
+                <span className="h-1.5 w-1.5 rounded-full bg-border" />
+              ) : (
+                <span
+                  className="h-1.5 w-1.5 bg-accent"
+                  style={{ opacity: o === 0 ? 0.12 : o }}
+                />
+              )}
             </button>
           );
         })}
@@ -131,7 +149,13 @@ export function CalendarClient({
       )}
 
       <div className="mt-6 flex items-center gap-2 text-xs text-text-faint">
-        Less <span>░</span> <span>▒</span> <span>▓</span> More
+        Less
+        <span className="flex items-center gap-1" aria-hidden="true">
+          {[0.12, 0.32, 0.6, 0.9].map((o) => (
+            <i key={o} className="block h-2 w-2 bg-accent" style={{ opacity: o }} />
+          ))}
+        </span>
+        More
       </div>
     </Screen>
   );

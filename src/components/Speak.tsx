@@ -1,6 +1,8 @@
 "use client";
 
-/** 🔊 button — plays the dictionary audio, falling back to speechSynthesis (SPEC 1.2). */
+import { IconSound } from "./icons";
+
+/** Speaker button — plays the dictionary audio, falling back to speechSynthesis (SPEC 1.2). */
 export function Speak({ word, audioUrl }: { word: string; audioUrl: string | null }) {
   function play() {
     if (audioUrl) {
@@ -15,9 +17,9 @@ export function Speak({ word, audioUrl }: { word: string; audioUrl: string | nul
       type="button"
       onClick={play}
       aria-label={`Pronounce ${word}`}
-      className="rounded-full px-2 py-1 text-lg active:bg-surface-2"
+      className="rounded-full p-1.5 text-base text-text-dim active:bg-surface-2"
     >
-      🔊
+      <IconSound />
     </button>
   );
 }

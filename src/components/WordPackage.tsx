@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Speak } from "./Speak";
+import { IconChevronDown, IconChevronRight } from "./icons";
 import type { Meaning, Sentence } from "@/lib/types";
 
 export interface WordPackageProps {
@@ -31,7 +32,7 @@ export function WordPackage(props: WordPackageProps) {
   return (
     <div className="space-y-3">
       <div>
-        <div className="font-serif text-[27px] font-medium tracking-[-0.01em]">{props.word}</div>
+        <div className="font-serif text-[27px] font-semibold tracking-[-0.005em]">{props.word}</div>
         {props.phonetic ? (
           <div className="flex items-center gap-1 text-text-dim">
             <span className="text-sm">{props.phonetic}</span>
@@ -48,7 +49,7 @@ export function WordPackage(props: WordPackageProps) {
       </div>
 
       {props.sentences.length > 0 && (
-        <ul className="space-y-2 border-l-2 border-[var(--accent-line)] pl-3.5 font-serif text-[15.5px] italic leading-relaxed text-text-dim">
+        <ul className="space-y-2 border-l-[3px] border-border-strong pl-3.5 font-serif text-[15.5px] italic leading-relaxed text-text-dim">
           {visibleSentences.map((s, i) => (
             <li key={i}>{s.text}</li>
           ))}
@@ -65,10 +66,11 @@ export function WordPackage(props: WordPackageProps) {
       {props.otherMeanings.length > 0 && (
         <div>
           <button
-            className="text-sm text-accent"
+            className="inline-flex items-center gap-1 text-sm text-accent"
             onClick={() => setShowMeanings((v) => !v)}
           >
-            {showMeanings ? "▾" : "▸"} {props.otherMeanings.length} more meaning
+            {showMeanings ? <IconChevronDown /> : <IconChevronRight />}
+            {props.otherMeanings.length} more meaning
             {props.otherMeanings.length > 1 ? "s" : ""}
           </button>
           {showMeanings && (
@@ -85,8 +87,11 @@ export function WordPackage(props: WordPackageProps) {
 
       {props.origin && (
         <div>
-          <button className="text-sm text-accent" onClick={() => setShowOrigin((v) => !v)}>
-            {showOrigin ? "▾" : "▸"} Origin
+          <button
+            className="inline-flex items-center gap-1 text-sm text-accent"
+            onClick={() => setShowOrigin((v) => !v)}
+          >
+            {showOrigin ? <IconChevronDown /> : <IconChevronRight />} Origin
           </button>
           {showOrigin && <p className="mt-1 text-sm text-text-dim">{props.origin}</p>}
         </div>

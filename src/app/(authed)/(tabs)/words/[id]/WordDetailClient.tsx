@@ -6,8 +6,15 @@ import { useState } from "react";
 import { addDays, daysBetween, today } from "@/lib/date";
 import { useAppData } from "@/lib/store/provider";
 import type { Word } from "@/lib/types";
-import { LevelDots, Screen } from "@/components/ui";
+import { LevelDots, Screen, SectionLabel } from "@/components/ui";
 import { Speak } from "@/components/Speak";
+import {
+  IconArrowLeft,
+  IconChevronDown,
+  IconChevronRight,
+  IconMore,
+  IconPencil,
+} from "@/components/icons";
 
 export function WordDetailClient({ word }: { word: Word }) {
   const router = useRouter();
@@ -54,23 +61,23 @@ export function WordDetailClient({ word }: { word: Word }) {
         <button
           onClick={() => router.back()}
           aria-label="Back"
-          className="press -ml-2 flex h-10 w-10 items-center justify-center text-lg text-text-dim"
+          className="press -ml-2 flex h-10 w-10 items-center justify-center text-xl text-text-dim"
         >
-          ←
+          <IconArrowLeft />
         </button>
         <button
           onClick={() => setMenu((v) => !v)}
           aria-label="Word options"
           className="press -mr-2 flex h-10 w-10 items-center justify-center text-xl text-text-dim"
         >
-          ⋯
+          <IconMore />
         </button>
       </div>
 
       {menu && (
         <div className="mb-4 space-y-1 rounded-[var(--r-input)] border border-border bg-surface p-2 text-sm">
           <button
-            className="w-full rounded-xl px-3 py-2 text-left text-bad active:bg-surface-2"
+            className="w-full rounded-[3px] px-3 py-2 text-left text-bad active:bg-surface-2"
             onClick={() => {
               setMenu(false);
               setConfirm(true);
@@ -79,7 +86,7 @@ export function WordDetailClient({ word }: { word: Word }) {
             Delete word
           </button>
           <button
-            className="w-full rounded-xl px-3 py-2 text-left active:bg-surface-2"
+            className="w-full rounded-[3px] px-3 py-2 text-left active:bg-surface-2"
             onClick={reset}
           >
             Reset progress
@@ -87,10 +94,10 @@ export function WordDetailClient({ word }: { word: Word }) {
         </div>
       )}
 
-      <div className="font-serif text-[28px] font-medium tracking-[-0.01em]">{word.word}</div>
+      <div className="font-serif text-[28px] font-semibold tracking-[-0.005em]">{word.word}</div>
       {word.phonetic && (
         <div className="flex items-center gap-1 text-text-dim">
-          <span className="font-mono text-sm">{word.phonetic}</span>
+          <span className="text-sm">{word.phonetic}</span>
           <Speak word={word.word} audioUrl={word.audio_url} />
         </div>
       )}
@@ -100,8 +107,12 @@ export function WordDetailClient({ word }: { word: Word }) {
 
       {word.other_meanings.length > 0 && (
         <div className="mt-2">
-          <button className="text-sm text-accent" onClick={() => setShowMeanings((v) => !v)}>
-            {showMeanings ? "▾" : "▸"} {word.other_meanings.length} more meaning
+          <button
+            className="inline-flex items-center gap-1 text-sm text-accent"
+            onClick={() => setShowMeanings((v) => !v)}
+          >
+            {showMeanings ? <IconChevronDown /> : <IconChevronRight />}
+            {word.other_meanings.length} more meaning
             {word.other_meanings.length > 1 ? "s" : ""}
           </button>
           {showMeanings && (
@@ -117,18 +128,19 @@ export function WordDetailClient({ word }: { word: Word }) {
       )}
       {word.origin && (
         <div className="mt-1">
-          <button className="text-sm text-accent" onClick={() => setShowOrigin((v) => !v)}>
-            {showOrigin ? "▾" : "▸"} Origin
+          <button
+            className="inline-flex items-center gap-1 text-sm text-accent"
+            onClick={() => setShowOrigin((v) => !v)}
+          >
+            {showOrigin ? <IconChevronDown /> : <IconChevronRight />} Origin
           </button>
           {showOrigin && <p className="mt-1 text-sm text-text-dim">{word.origin}</p>}
         </div>
       )}
 
       <div className="my-5 h-px bg-border" />
-      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-faint">
-        Examples
-      </div>
-      <ul className="mt-2 space-y-3">
+      <SectionLabel>Examples</SectionLabel>
+      <ul className="mt-3 space-y-3">
         {visible.map(({ s, idx }) => (
           <li key={idx} className="flex items-start justify-between gap-3">
             <span className="italic text-text-dim">&ldquo;{s.text}&rdquo;</span>
@@ -136,9 +148,10 @@ export function WordDetailClient({ word }: { word: Word }) {
               onClick={() => hide(idx)}
               disabled={busyIdx === idx}
               title="Hide this sentence"
-              className="shrink-0 text-accent disabled:opacity-30"
+              aria-label="Hide this sentence"
+              className="shrink-0 text-base text-accent disabled:opacity-30"
             >
-              {busyIdx === idx ? "…" : "✎"}
+              {busyIdx === idx ? "…" : <IconPencil />}
             </button>
           </li>
         ))}
@@ -151,10 +164,8 @@ export function WordDetailClient({ word }: { word: Word }) {
       )}
 
       <div className="my-5 h-px bg-border" />
-      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-faint">
-        Progress
-      </div>
-      <div className="mt-2 space-y-1 text-sm">
+      <SectionLabel>Progress</SectionLabel>
+      <div className="mt-3 space-y-1 text-sm">
         <div>
           <LevelDots level={word.level} streak={word.streak} />
         </div>
@@ -166,8 +177,8 @@ export function WordDetailClient({ word }: { word: Word }) {
 
       {confirm && (
         <div className="fixed inset-0 z-20 flex items-end bg-black/60 p-5 safe-b">
-          <div className="edge w-full rounded-[var(--r-card)] border border-border bg-surface p-5">
-            <p className="font-serif text-xl font-medium">Delete &ldquo;{word.word}&rdquo;?</p>
+          <div className="w-full rounded-[var(--r-card)] border border-border border-t-2 border-t-border-strong bg-surface p-5">
+            <p className="font-serif text-xl font-bold">Delete &ldquo;{word.word}&rdquo;?</p>
             <p className="mt-1 text-sm text-text-dim">This can&rsquo;t be undone.</p>
             <div className="mt-4 flex gap-2">
               <button
@@ -190,8 +201,8 @@ export function WordDetailClient({ word }: { word: Word }) {
         </div>
       )}
 
-      <Link href="/words" className="mt-6 text-sm text-text-faint">
-        ← All words
+      <Link href="/words" className="mt-6 inline-flex items-center gap-1.5 text-sm text-text-faint">
+        <IconArrowLeft /> All words
       </Link>
     </Screen>
   );
