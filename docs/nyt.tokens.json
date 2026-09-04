@@ -1,0 +1,187 @@
+{
+  "$schema": "https://design-tokens.org/schema.json",
+  "_source": "Extracted from nytimes.com production CSS, 2026-09. Reference only. NYT text faces are custom/unlicensed — use the fallback stacks.",
+  "primitive": {
+    "color": {
+      "ink":   { "$value": "#121212", "$type": "color" },
+      "white": { "$value": "#ffffff", "$type": "color" },
+      "gray": {
+        "50":  { "$value": "#f8f8f8", "$type": "color" },
+        "100": { "$value": "#ebebeb", "$type": "color" },
+        "200": { "$value": "#dfdfdf", "$type": "color" },
+        "300": { "$value": "#c7c7c7", "$type": "color" },
+        "400": { "$value": "#959595", "$type": "color" },
+        "500": { "$value": "#8b8b8b", "$type": "color" },
+        "600": { "$value": "#727272", "$type": "color" },
+        "700": { "$value": "#5a5a5a", "$type": "color" },
+        "800": { "$value": "#363636", "$type": "color" },
+        "850": { "$value": "#2a2a2a", "$type": "color" },
+        "900": { "$value": "#121212", "$type": "color" }
+      },
+      "blue": {
+        "editorial":     { "$value": "#326891", "$type": "color" },
+        "editorial-dim": { "$value": "#7ca7c8", "$type": "color" },
+        "link":          { "$value": "#346eb7", "$type": "color" },
+        "link-dark":     { "$value": "#6ba1dd", "$type": "color" },
+        "legacy":        { "$value": "#567b95", "$type": "color" }
+      },
+      "red": {
+        "breaking":      { "$value": "#d0021b", "$type": "color" },
+        "breaking-dark": { "$value": "#e14e5b", "$type": "color" },
+        "negative":      { "$value": "#a90111", "$type": "color" },
+        "negative-dark": { "$value": "#ea7980", "$type": "color" }
+      },
+      "green": {
+        "positive":      { "$value": "#267c30", "$type": "color" },
+        "positive-dark": { "$value": "#63a859", "$type": "color" }
+      },
+      "orange": {
+        "developing":      { "$value": "#e6540a", "$type": "color" },
+        "developing-dark": { "$value": "#f78145", "$type": "color" }
+      },
+      "yellow": {
+        "highlight":      { "$value": "#fefad1", "$type": "color" },
+        "highlight-dark": { "$value": "#35352f", "$type": "color" }
+      },
+      "scrim": { "$value": "#12121299", "$type": "color" }
+    },
+    "fontFamily": {
+      "cheltenham":      { "$value": "nyt-cheltenham, 'Playfair Display', Georgia, 'Times New Roman', Times, serif", "$type": "fontFamily" },
+      "cheltenham-cond": { "$value": "nyt-cheltenham-cond, 'Playfair Display', Georgia, serif", "$type": "fontFamily" },
+      "imperial":        { "$value": "nyt-imperial, Georgia, 'Times New Roman', Times, serif", "$type": "fontFamily" },
+      "franklin":        { "$value": "nyt-franklin, 'Libre Franklin', Helvetica, Arial, sans-serif", "$type": "fontFamily" },
+      "karnak":          { "$value": "nyt-karnak, 'Zilla Slab', Georgia, serif", "$type": "fontFamily" }
+    },
+    "fontWeight": {
+      "ultra-light": { "$value": "100", "$type": "fontWeight" },
+      "light":       { "$value": "200", "$type": "fontWeight" },
+      "book":        { "$value": "400", "$type": "fontWeight" },
+      "medium":      { "$value": "500", "$type": "fontWeight" },
+      "semibold":    { "$value": "600", "$type": "fontWeight" },
+      "bold":        { "$value": "700", "$type": "fontWeight" },
+      "extrabold":   { "$value": "800", "$type": "fontWeight" },
+      "black":       { "$value": "900", "$type": "fontWeight" }
+    },
+    "fontSize": {
+      "10": { "$value": "0.625rem", "$type": "dimension" },
+      "11": { "$value": "0.6875rem", "$type": "dimension" },
+      "12": { "$value": "0.75rem", "$type": "dimension" },
+      "14": { "$value": "0.875rem", "$type": "dimension" },
+      "16": { "$value": "1rem", "$type": "dimension" },
+      "18": { "$value": "1.125rem", "$type": "dimension" },
+      "20": { "$value": "1.25rem", "$type": "dimension" },
+      "22": { "$value": "1.375rem", "$type": "dimension" },
+      "24": { "$value": "1.5rem", "$type": "dimension" },
+      "26": { "$value": "1.625rem", "$type": "dimension" },
+      "28": { "$value": "1.75rem", "$type": "dimension" },
+      "32": { "$value": "2rem", "$type": "dimension" },
+      "36": { "$value": "2.25rem", "$type": "dimension" },
+      "40": { "$value": "2.5rem", "$type": "dimension" },
+      "48": { "$value": "3rem", "$type": "dimension" },
+      "56": { "$value": "3.5rem", "$type": "dimension" },
+      "64": { "$value": "4rem", "$type": "dimension" }
+    },
+    "lineHeight": {
+      "tight":   { "$value": "1", "$type": "number" },
+      "hairline":{ "$value": "1.1", "$type": "number" },
+      "heading": { "$value": "1.15", "$type": "number" },
+      "snug":    { "$value": "1.2", "$type": "number" },
+      "label":   { "$value": "1.25", "$type": "number" },
+      "ui":      { "$value": "1.3", "$type": "number" },
+      "body":    { "$value": "1.39", "$type": "number" },
+      "relaxed": { "$value": "1.5", "$type": "number" }
+    },
+    "letterSpacing": {
+      "headline": { "$value": "0.0025em", "$type": "dimension" },
+      "tight":    { "$value": "0.01em", "$type": "dimension" },
+      "wide":     { "$value": "0.05em", "$type": "dimension" },
+      "label":    { "$value": "0.1em", "$type": "dimension" }
+    },
+    "spacing": {
+      "0.5": { "$value": "0.25rem", "$type": "dimension" },
+      "1":   { "$value": "0.5rem", "$type": "dimension" },
+      "1.5": { "$value": "0.75rem", "$type": "dimension" },
+      "2":   { "$value": "1rem", "$type": "dimension" },
+      "2.5": { "$value": "1.25rem", "$type": "dimension" },
+      "3":   { "$value": "1.5rem", "$type": "dimension" },
+      "4":   { "$value": "2rem", "$type": "dimension" },
+      "5":   { "$value": "2.5rem", "$type": "dimension" },
+      "6":   { "$value": "3rem", "$type": "dimension" }
+    },
+    "radius": {
+      "none": { "$value": "0", "$type": "dimension" },
+      "sm":   { "$value": "3px", "$type": "dimension" },
+      "full": { "$value": "9999px", "$type": "dimension" }
+    },
+    "borderWidth": {
+      "1":   { "$value": "1px", "$type": "dimension" },
+      "1.5": { "$value": "1.5px", "$type": "dimension" },
+      "2":   { "$value": "2px", "$type": "dimension" },
+      "3":   { "$value": "3px", "$type": "dimension" }
+    }
+  },
+  "semantic": {
+    "color": {
+      "background":          { "$value": "{primitive.color.white}", "$type": "color" },
+      "background-secondary":{ "$value": "{primitive.color.gray.50}", "$type": "color" },
+      "background-tertiary": { "$value": "{primitive.color.gray.100}", "$type": "color" },
+      "background-highlight":{ "$value": "{primitive.color.yellow.highlight}", "$type": "color" },
+      "foreground":          { "$value": "{primitive.color.ink}", "$type": "color" },
+      "foreground-secondary":{ "$value": "{primitive.color.gray.700}", "$type": "color" },
+      "foreground-muted":    { "$value": "{primitive.color.gray.600}", "$type": "color" },
+      "placeholder":         { "$value": "{primitive.color.gray.500}", "$type": "color" },
+      "border":              { "$value": "{primitive.color.gray.200}", "$type": "color" },
+      "border-strong":       { "$value": "{primitive.color.ink}", "$type": "color" },
+      "link":                { "$value": "{primitive.color.blue.link}", "$type": "color" },
+      "accent":              { "$value": "{primitive.color.blue.editorial}", "$type": "color" },
+      "destructive":         { "$value": "{primitive.color.red.breaking}", "$type": "color" },
+      "negative":            { "$value": "{primitive.color.red.negative}", "$type": "color" },
+      "positive":            { "$value": "{primitive.color.green.positive}", "$type": "color" },
+      "developing":          { "$value": "{primitive.color.orange.developing}", "$type": "color" }
+    },
+    "typography": {
+      "headline-news":    { "$value": "var(--primitive-fontWeight-bold) var(--primitive-fontSize-32)/var(--primitive-lineHeight-snug) var(--primitive-fontFamily-cheltenham)", "$type": "typography" },
+      "headline-feature": { "$value": "var(--primitive-fontWeight-light) var(--primitive-fontSize-48)/var(--primitive-lineHeight-heading) var(--primitive-fontFamily-cheltenham)", "$type": "typography" },
+      "headline-opinion": { "$value": "var(--primitive-fontWeight-bold) var(--primitive-fontSize-24)/var(--primitive-lineHeight-heading) var(--primitive-fontFamily-cheltenham-cond)", "$type": "typography" },
+      "body":             { "$value": "var(--primitive-fontWeight-book) var(--primitive-fontSize-18)/var(--primitive-lineHeight-body) var(--primitive-fontFamily-imperial)", "$type": "typography" },
+      "ui-text":          { "$value": "var(--primitive-fontWeight-medium) var(--primitive-fontSize-16)/var(--primitive-lineHeight-ui) var(--primitive-fontFamily-franklin)", "$type": "typography" },
+      "ui-title":         { "$value": "var(--primitive-fontWeight-semibold) var(--primitive-fontSize-16)/var(--primitive-lineHeight-ui) var(--primitive-fontFamily-franklin)", "$type": "typography" },
+      "label":            { "$value": "var(--primitive-fontWeight-semibold) var(--primitive-fontSize-11)/var(--primitive-lineHeight-label) var(--primitive-fontFamily-franklin)", "$type": "typography" }
+    }
+  },
+  "component": {
+    "button": {
+      "bg":        { "$value": "{semantic.color.background}", "$type": "color" },
+      "fg":        { "$value": "{semantic.color.foreground}", "$type": "color" },
+      "border":    { "$value": "{semantic.color.border-strong}", "$type": "color" },
+      "radius":    { "$value": "{primitive.radius.sm}", "$type": "dimension" },
+      "height":    { "$value": "44px", "$type": "dimension" },
+      "font":      { "$value": "var(--typography-ui-title)", "$type": "typography" }
+    },
+    "divider": {
+      "story":    { "$value": "1px solid var(--primitive-color-gray-200)", "$type": "border" },
+      "section":  { "$value": "2px solid var(--primitive-color-ink)", "$type": "border" }
+    }
+  },
+  "dark": {
+    "semantic": {
+      "color": {
+        "background":          { "$value": "{primitive.color.ink}", "$type": "color" },
+        "background-secondary":{ "$value": "{primitive.color.gray.850}", "$type": "color" },
+        "background-tertiary": { "$value": "{primitive.color.gray.800}", "$type": "color" },
+        "background-highlight":{ "$value": "{primitive.color.yellow.highlight-dark}", "$type": "color" },
+        "foreground":          { "$value": "{primitive.color.gray.50}", "$type": "color" },
+        "foreground-secondary":{ "$value": "#bbbbbb", "$type": "color" },
+        "foreground-muted":    { "$value": "#a3a3a3", "$type": "color" },
+        "border":              { "$value": "#424242", "$type": "color" },
+        "border-strong":       { "$value": "{primitive.color.gray.50}", "$type": "color" },
+        "link":                { "$value": "{primitive.color.blue.link-dark}", "$type": "color" },
+        "accent":              { "$value": "{primitive.color.blue.editorial-dim}", "$type": "color" },
+        "destructive":         { "$value": "{primitive.color.red.breaking-dark}", "$type": "color" },
+        "negative":            { "$value": "{primitive.color.red.negative-dark}", "$type": "color" },
+        "positive":            { "$value": "{primitive.color.green.positive-dark}", "$type": "color" },
+        "developing":          { "$value": "{primitive.color.orange.developing-dark}", "$type": "color" }
+      }
+    }
+  }
+}

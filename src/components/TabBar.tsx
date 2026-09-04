@@ -12,7 +12,7 @@ const tabs = [
 export function TabBar() {
   const pathname = usePathname();
   return (
-    <nav className="sticky bottom-0 z-10 border-t border-border bg-bg/95 backdrop-blur safe-b">
+    <nav className="sticky bottom-0 z-10 border-t-2 border-border-strong bg-bg/95 backdrop-blur safe-b">
       <div className="mx-auto flex max-w-md">
         {tabs.map((t) => {
           const active = t.href === "/" ? pathname === "/" : pathname.startsWith(t.href);

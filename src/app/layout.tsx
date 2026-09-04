@@ -4,7 +4,7 @@ import "./globals.css";
 
 const GOOGLE_FONTS =
   "https://fonts.googleapis.com/css2?family=Libre+Franklin:wght@400;500;600;700" +
-  "&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500" +
+  "&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,500" +
   "&display=swap";
 
 export const metadata: Metadata = {
@@ -13,14 +13,17 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "black",
+    statusBarStyle: "default",
     title: "VX Card",
   },
   // Favicon + apple-touch-icon come from src/app/icon.png and src/app/apple-icon.png.
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0c0e",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#121212" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

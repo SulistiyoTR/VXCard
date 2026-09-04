@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CONFIG } from "@/lib/config";
 import { daysBetween, today } from "@/lib/date";
 import { buildQuestion, hintBudget, hintMask, matchTyped, nextHintPosition, quizLevel, type Question } from "@/lib/quiz";
@@ -9,8 +9,15 @@ import { buildPracticeSession } from "@/lib/session";
 import { scoreAnswer, updateCard, updateCardHardMode } from "@/lib/scheduler";
 import { useAppData } from "@/lib/store/provider";
 import type { CardState, ReviewResult, SessionItem, SessionRow, Word } from "@/lib/types";
-import { Button } from "@/components/ui";
+import { Button, Dots, SectionLabel } from "@/components/ui";
 import { WordPackage } from "@/components/WordPackage";
+import {
+  IconCheck,
+  IconClose,
+  IconPencil,
+  IconPending,
+  IconSlow,
+} from "@/components/icons";
 
 function newSessionRow(planned: number, source: SessionRow["source"]): SessionRow {
   const now = new Date().toISOString();
@@ -288,11 +295,11 @@ export function SessionRunner({
           className="text-xl leading-none text-text-dim"
           aria-label="Quit session"
         >
-          ✕
+          <IconClose />
         </button>
-        <div className="h-[5px] flex-1 overflow-hidden rounded-full bg-surface-2">
+        <div className="h-[5px] flex-1 overflow-hidden border border-border bg-surface-2">
           <div
-            className="h-full rounded-full bg-accent transition-[width] duration-[440ms] [transition-timing-function:var(--spring)]"
+            className="h-full bg-text transition-[width] duration-[380ms] [transition-timing-function:var(--spring)]"
             style={{ width: `${(answered / planned) * 100}%` }}
           />
         </div>
@@ -315,8 +322,8 @@ export function SessionRunner({
 
       {showQuit && (
         <div className="fixed inset-0 z-20 flex items-end bg-black/60 p-5 safe-b">
-          <div className="edge w-full rounded-[var(--r-card)] border border-border bg-surface p-5">
-            <p className="font-serif text-xl font-medium">Quit session?</p>
+          <div className="w-full rounded-[var(--r-card)] border border-border border-t-2 border-t-border-strong bg-surface p-5">
+            <p className="font-serif text-xl font-bold">Quit session?</p>
             <p className="mt-1 text-sm text-text-dim">
               Your {answered} answers are saved, but your streak won&rsquo;t count today.
             </p>
@@ -380,7 +387,7 @@ function QuestionView({
     ) : question.level === 2 ? (
       <p className="max-w-xs font-serif text-[20px] leading-snug text-text">{question.prompt}</p>
     ) : (
-      <p className="font-serif text-[44px] font-medium leading-none tracking-[-0.02em]">
+      <p className="font-serif text-[44px] font-bold leading-none tracking-[-0.015em]">
         {question.prompt}
       </p>
     );
@@ -401,8 +408,8 @@ function QuestionView({
       </div>
 
       <div className="safe-b">
-        <div className="mb-3 border-t border-border pt-3.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-text-faint">
-          {ANSWER_LABEL[question.level]}
+        <div className="mb-3 mt-3.5">
+          <SectionLabel>{ANSWER_LABEL[question.level]}</SectionLabel>
         </div>
 
         {question.level === 4 ? (
@@ -476,19 +483,19 @@ function QuestionView({
 /* ---------------------------------------------------------------- Feedback */
 
 // Informative, never punishing (SPEC §2) — a miss reads in dimmed text, not red.
-function topLine(o: Outcome): { icon: string; text: string; className: string } {
+function topLine(o: Outcome): { icon: ReactNode; text: string; className: string } {
   const secs = (o.durationMs / 1000).toFixed(1);
   switch (o.result) {
     case "correct":
-      return { icon: "✓", text: `Correct · ${secs}s`, className: "text-good" };
+      return { icon: <IconCheck />, text: `Correct · ${secs}s`, className: "text-good" };
     case "slow":
       return o.helpUsed > 0
-        ? { icon: "~", text: `Correct, used ${o.helpUsed} hint${o.helpUsed > 1 ? "s" : ""}`, className: "text-slow" }
-        : { icon: "~", text: `Correct, but slow · ${secs}s`, className: "text-slow" };
+        ? { icon: <IconSlow />, text: `Correct, used ${o.helpUsed} hint${o.helpUsed > 1 ? "s" : ""}`, className: "text-slow" }
+        : { icon: <IconSlow />, text: `Correct, but slow · ${secs}s`, className: "text-slow" };
     case "wrong":
-      return { icon: "✕", text: "Not quite", className: "text-text-dim" };
+      return { icon: <IconClose />, text: "Not quite", className: "text-text-dim" };
     case "dontknow":
-      return { icon: "○", text: "Not yet — that's fine", className: "text-text-dim" };
+      return { icon: <IconPending />, text: "Not yet — that's fine", className: "text-text-dim" };
   }
 }
 
@@ -530,7 +537,8 @@ function FeedbackView({
   return (
     <div className="slide-in flex flex-1 flex-col pt-6">
       <div className={`flex items-center gap-2 text-base font-semibold ${line.className}`}>
-        {line.icon} {line.text}
+        {line.icon}
+        <span>{line.text}</span>
       </div>
       {outcome.result === "wrong" && outcome.typedAnswer && (
         <div className="mt-1 text-sm text-text-dim">
@@ -574,9 +582,9 @@ function FeedbackView({
           <button
             onClick={changeSentence}
             disabled={busy}
-            className="mt-2 self-end text-[12.5px] text-accent disabled:opacity-40"
+            className="mt-2 inline-flex items-center gap-1 self-end text-[12.5px] text-accent disabled:opacity-40"
           >
-            {busy ? "…" : "✎ change sentence"}
+            <IconPencil /> {busy ? "…" : "change sentence"}
           </button>
         ))}
 
@@ -589,17 +597,20 @@ function FeedbackView({
 
 function LevelIndicator({ oldLevel, newState }: { oldLevel: number; newState: CardState }) {
   const target = CONFIG.LEVEL_TARGETS[newState.level] ?? 3;
-  const dots = Array.from({ length: target }, (_, i) => (i < newState.streak ? "●" : "○")).join("");
   return (
-    <span className="text-text-dim">
+    <span className="inline-flex items-center gap-1.5 text-text-dim">
       {newState.level >= 5 ? (
-        <span className="text-good">✓ Finished</span>
+        <span className="inline-flex items-center gap-1.5 text-good">
+          <IconCheck /> Finished
+        </span>
       ) : (
         <>
-          Level {newState.level} <span className="tracking-[0.18em] text-text">{dots}</span>
+          <span>Level {newState.level}</span>
+          <span className="text-text">
+            <Dots filled={newState.streak} total={target} />
+          </span>
           {newState.level !== oldLevel && (
             <span className={newState.level > oldLevel ? "text-good" : "text-slow"}>
-              {" "}
               ({oldLevel} → {newState.level})
             </span>
           )}
@@ -635,15 +646,21 @@ function CompleteView({
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col px-6 pt-16 safe-b">
       <div className="text-center">
-        <h1 className="font-serif text-[26px] font-medium tracking-[-0.01em]">
+        <h1 className="font-serif text-[26px] font-bold tracking-[-0.005em]">
           {quitEarly ? "Session stopped" : "Session complete"}
         </h1>
       </div>
 
       <div className="mt-6 flex justify-center gap-7 text-lg tabular-nums">
-        <span className="text-good">✓ {good}</span>
-        <span className="text-slow">~ {slow}</span>
-        <span className="text-text-dim">✕ {bad}</span>
+        <span className="inline-flex items-center gap-1.5 text-good">
+          <IconCheck /> {good}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-slow">
+          <IconSlow /> {slow}
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-text-dim">
+          <IconClose /> {bad}
+        </span>
       </div>
 
       {allCorrect && <p className="mt-3 text-center text-good">Nice — all correct</p>}
@@ -677,13 +694,10 @@ function CompleteView({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="mt-6">
-      <div className="my-3 h-px bg-border" />
-      <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-faint">
-        {title}
-      </div>
+      <SectionLabel>{title}</SectionLabel>
       <div className="mt-2 space-y-1">{children}</div>
     </div>
   );

@@ -26,31 +26,14 @@ function Step({ n, img, title, body }: { n: number } & (typeof STEPS)[number]) {
   return (
     <div className="space-y-2.5">
       {/* eslint-disable-next-line @next/next/no-img-element -- decorative onboarding art */}
-      <img src={img} alt="" className="mx-auto block h-11 w-auto opacity-60" />
+      {/* Art is light line-work: invert it on the white ground, leave it alone in dark. */}
+      <img src={img} alt="" className="mx-auto block h-11 w-auto opacity-70 invert dark:invert-0" />
       <div className="flex items-center gap-3">
-        <span
-          className="relative grid h-7 w-7 shrink-0 place-items-center text-text-faint"
-          style={{
-            background:
-              "radial-gradient(circle at 50% 120%, rgba(0,0,0,0.55), transparent 55%)",
-          }}
-        >
-          <svg viewBox="0 0 32 32" fill="none" className="absolute inset-0 h-full w-full">
-            <circle
-              cx="16"
-              cy="16"
-              r="13.5"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeDasharray="72 16"
-              strokeDashoffset="28"
-            />
-          </svg>
-          <span className="font-serif text-[13px] font-medium leading-none text-text">{n}</span>
+        <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full border border-border-strong text-text-faint">
+          <span className="font-serif text-[13px] font-semibold leading-none text-text">{n}</span>
         </span>
         <div>
-          <h3 className="font-serif text-[17px] font-medium leading-tight tracking-[-0.005em]">
+          <h3 className="font-serif text-[17px] font-semibold leading-tight tracking-[-0.005em]">
             {title}
           </h3>
           <p className="mt-0.5 text-[13.5px] leading-snug text-text-dim">{body}</p>
@@ -85,11 +68,11 @@ export default function LoginPage() {
       {/* Header + first step, pinned to the bottom of the top half. */}
       <div className="flex min-h-0 flex-1 flex-col justify-end gap-8">
         <header className="text-center">
-          <div className="font-serif text-[40px] font-medium tracking-[-0.02em]">VX Card</div>
+          <div className="font-serif text-[40px] font-bold tracking-[-0.015em]">VX Card</div>
           <p className="mt-2 text-[15px] text-text-dim">
             Build vocabulary that you&rsquo;ll remember.
           </p>
-          <div className="mt-6 h-px w-full bg-white/25" />
+          <div className="mt-6 h-px w-full bg-border" />
         </header>
         <Step n={1} {...STEPS[0]} />
       </div>

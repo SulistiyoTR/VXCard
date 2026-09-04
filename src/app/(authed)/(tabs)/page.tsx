@@ -8,6 +8,7 @@ import { bestStreak, currentStreak } from "@/lib/streak";
 import { useAppData } from "@/lib/store/provider";
 import { waitingIndicator } from "@/lib/waiting";
 import { Button, ButtonLink, Screen, Tally } from "@/components/ui";
+import { IconPlay, IconPlus, IconWarning } from "@/components/icons";
 
 const DEFAULT_QUOTA = 15;
 
@@ -33,7 +34,7 @@ export default function HomePage() {
   return (
     <Screen className="px-5 pb-4 pt-12 safe-b">
       <div className="flex min-h-[1rem] items-center justify-between text-[11px] font-semibold uppercase tracking-[0.16em]">
-        <span className="text-good">{firstName ?? " "}</span>
+        <span className="text-accent">{firstName ??" "}</span>
         {!online && <span className="text-text-faint">offline</span>}
       </div>
 
@@ -48,10 +49,10 @@ export default function HomePage() {
         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-faint">
           Today
         </div>
-        <div className="mt-2.5 flex items-baseline gap-2 font-serif text-[30px] font-medium leading-tight tracking-[-0.015em]">
+        <div className="mt-2.5 flex items-baseline gap-2 font-serif text-[30px] font-bold leading-tight tracking-[-0.01em]">
           <span>{!ready ? "…" : empty ? "Nothing to review yet" : waiting.message}</span>
           {ready && !empty && waiting.tone === "warn" && (
-            <span className="text-base text-text-faint">⚠</span>
+            <IconWarning className="text-base text-slow" />
           )}
         </div>
         {ready &&
@@ -65,15 +66,21 @@ export default function HomePage() {
       <div className="mt-auto space-y-3 pb-2">
         {empty ? (
           <>
-            <Button disabled>▶ Review</Button>
+            <Button disabled>
+              <IconPlay /> Review
+            </Button>
             <p className="text-center text-[12.5px] text-text-faint">
               Add your first word before you can review
             </p>
-            <ButtonLink href="/add">＋ Add word</ButtonLink>
+            <ButtonLink href="/add">
+              <IconPlus /> Add word
+            </ButtonLink>
           </>
         ) : (
           <>
-            <ButtonLink href={reviewHref}>▶ Review</ButtonLink>
+            <ButtonLink href={reviewHref}>
+              <IconPlay /> Review
+            </ButtonLink>
 
             {hmUnlocked ? (
               <ButtonLink href="/session?mode=hardmode" variant="secondary">
@@ -86,7 +93,7 @@ export default function HomePage() {
             )}
 
             <ButtonLink href="/add" variant="secondary">
-              ＋ Add word
+              <IconPlus /> Add word
             </ButtonLink>
           </>
         )}
