@@ -160,17 +160,3 @@ export interface SessionItem {
   word: Word;
   source: ReviewSource;
 }
-
-/** What the LLM + dictionary pipeline produces before a card is persisted (SPEC 1.4). */
-export interface GeneratedPackage {
-  word: string;
-  phonetic: string | null;
-  audio_url: string | null;
-  pos: string;
-  definition: string;
-  origin: string | null;
-  other_meanings: Meaning[];
-  sentences: Sentence[];
-  distractor_defs: string[];
-  distractor_words: string[];
-}

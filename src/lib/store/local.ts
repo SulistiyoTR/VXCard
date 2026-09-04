@@ -1,7 +1,8 @@
 "use client";
 
+import { addDays, today } from "@/lib/date";
 import { db } from "./idb";
-import { joinWord, splitWord } from "./shape";
+import { joinWord } from "./shape";
 import {
   CARD_FIELDS,
   type Review,
@@ -83,9 +84,28 @@ export async function putServerSessions(sessions: SessionRow[]): Promise<void> {
 
 /* ------------------------------------------------------ writes (local op) */
 
-/** Add flow: cache the shared content and create a dirty card pointing at it. */
-export async function addCardLocal(word: Word): Promise<void> {
-  const { content, card } = splitWord(word);
+/**
+ * Add flow (SPEC 1.1 step 4): cache the shared content (already persisted
+ * server-side) and create a fresh dirty card for this user pointing at it.
+ * New word = level 1, due tomorrow (SPEC 3.4).
+ */
+export async function addCardLocal(content: WordContent): Promise<void> {
+  const now = new Date().toISOString();
+  const card: UserCard = {
+    id: crypto.randomUUID(),
+    user_id: "", // filled by the sync POST
+    word_id: content.id,
+    level: 1,
+    streak: 0,
+    due_date: addDays(today(), 1),
+    lapse_count: 0,
+    last_seen_date: null,
+    sentence_usage: [],
+    hidden_sentences: [],
+    review_count: 0,
+    created_at: now,
+    updated_at: now,
+  };
   const d = await db();
   const tx = d.transaction(["words", "cards", "cardDirty"], "readwrite");
   await Promise.all([
