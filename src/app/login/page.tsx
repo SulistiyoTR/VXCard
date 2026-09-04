@@ -26,7 +26,7 @@ function Step({ n, img, title, body }: { n: number } & (typeof STEPS)[number]) {
   return (
     <div className="space-y-2.5">
       {/* eslint-disable-next-line @next/next/no-img-element -- decorative onboarding art */}
-      <img src={img} alt="" className="h-11 w-auto opacity-60" />
+      <img src={img} alt="" className="mx-auto block h-11 w-auto opacity-60" />
       <div className="flex items-center gap-3">
         <span
           className="relative grid h-7 w-7 shrink-0 place-items-center text-text-faint"
