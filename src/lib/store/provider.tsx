@@ -5,6 +5,7 @@ import type { Review, SessionRow, Word, WordContent } from "@/lib/types";
 import { useOnline } from "@/lib/useOnline";
 import {
   addCardLocal,
+  bumpSentenceUsageLocal,
   deleteCardLocal,
   enqueueReview,
   isSeeded,
@@ -28,6 +29,8 @@ export interface AppData {
   addWord: (content: WordContent) => Promise<void>;
   patchWord: (id: string, patch: Partial<Word>) => Promise<void>;
   removeWord: (id: string) => Promise<void>;
+  /** Bump `sentence_usage[index]` when a level 3/4 sentence is shown (SPEC 1.6). */
+  bumpSentenceUsage: (wordId: string, index: number) => Promise<void>;
   recordReview: (review: Review) => Promise<void>;
   upsertSession: (session: SessionRow) => Promise<void>;
 }
@@ -132,6 +135,15 @@ export function AppDataProvider({
     [reload, refresh],
   );
 
+  // Usage isn't rendered anywhere, so skip the reload — just persist + queue sync.
+  const bumpSentenceUsage = useCallback(
+    async (wordId: string, index: number) => {
+      await bumpSentenceUsageLocal(wordId, index);
+      void refresh();
+    },
+    [refresh],
+  );
+
   const recordReview = useCallback(async (review: Review) => {
     await enqueueReview(review);
     setReviews(await loadReviews());
@@ -159,6 +171,7 @@ export function AppDataProvider({
         addWord,
         patchWord,
         removeWord,
+        bumpSentenceUsage,
         recordReview,
         upsertSession,
       }}

@@ -41,7 +41,12 @@ order) first.
     / `reviewOutbox`.
   - `useAppData().deck` is `Word[]` — a **joined view** of `WordContent` + `UserCard`
     (`Word.id` = word id; scheduling fields come from the card). `patchWord` only writes
-    the `CARD_FIELDS`; content edits are ignored (append-only pool, Sesi 4).
+    the `CARD_FIELDS`; shared content is never touched from the client.
+  - Sentence rotation (SPEC 1.6): `pickSentence` skips flagged/hidden, picks the
+    least-used per this user's `sentence_usage`. `bumpSentenceUsage(wordId, idx)` fires
+    when a level 3/4 sentence is **shown** (SessionRunner effect keyed on queue pos),
+    not when answered. "Change this sentence" = `patchWord({hidden_sentences})` +
+    `POST /api/sentence/hide` (global `hide_count` bump / auto-flag at `FLAG_THRESHOLD`).
 - **Sync endpoint**: `src/app/api/sync/route.ts` — GET returns per-user `cards` /
   `sessions` / `reviews` changed since `?since`, plus the shared `words` content behind
   this user's cards whose `updated_at > since` (so a growing sentence pool reaches the
@@ -56,8 +61,8 @@ order) first.
   The client then creates the local `user_cards` row (`addCardLocal`), which syncs.
   "In your deck" (client `deck` + server `user_cards` check) vs "in the global table"
   are distinct.
-- **Other server writes that must stay online** (LLM): `src/lib/actions.ts` —
-  `regenerateSentence` (inert until Sesi 4/6), `signOut`. Everything else is local.
+- **Other server-only writes**: `POST /api/sentence/hide` (service-role, `hide_sentence`
+  RPC). `src/lib/actions.ts` is just `signOut` now. Everything else is local.
 - **Auth**: Supabase Google OAuth. `src/proxy.ts` gates routes; `/api`, `/auth`,
   `/login` are public.
 - **Notifications (SPEC 6.3)**: `/api/push/subscribe` stores a subscription;
@@ -81,7 +86,8 @@ append-only (index-referenced by `user_cards.sentence_usage`). `words.updated_at
 bumped by a trigger; `user_cards.updated_at` is set by the client (LWW), no trigger.
 RPCs (service-role only): `claim_sentence_tickets` (`FOR UPDATE SKIP LOCKED`) +
 `complete_sentence_ticket` for the ticket queue; `increment_mw_lookup(user_id, day)`
-for the Add-word rate limit.
+for the Add-word rate limit; `hide_sentence(word_id, index, flag_threshold)` for
+"Change this sentence".
 
 ## Gotchas
 
@@ -95,5 +101,6 @@ for the Add-word rate limit.
   / `src/lib/useOnline.ts` (both `useSyncExternalStore`) for that class of state.
 - IDs for offline-created rows are `crypto.randomUUID()` client-side; the sync
   POST fills `user_id`. Bump `updated_at` on every local card edit (`patchCardLocal` does).
-- **Sesi 1–3 done; Sesi 4 next** (per-user sentence rotation + `sentence_usage`
-  bump-on-display + the ticket auto-grow). Add-word works end to end now.
+- **Sesi 1–4 done; Sesi 5 next** — the ticket auto-grow system (`sentence_requests`,
+  the two RPCs, a post-session background endpoint). Per-user sentence rotation +
+  hide/flag are live; the pool doesn't grow on its own yet.

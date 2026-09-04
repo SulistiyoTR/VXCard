@@ -136,6 +136,25 @@ export async function patchCardLocal(
   return getWordLocal(wordId);
 }
 
+/**
+ * Bump `sentence_usage[index]` for this user's card — called when a level 3/4
+ * sentence is *shown* (SPEC 1.6). Grows the array with zeros as needed, stamps
+ * updated_at, marks dirty. Race-free: one read-modify-write on the live card.
+ */
+export async function bumpSentenceUsageLocal(
+  wordId: string,
+  index: number,
+): Promise<void> {
+  const d = await db();
+  const card = await d.get("cards", wordId);
+  if (!card) return;
+  const usage = [...(card.sentence_usage ?? [])];
+  while (usage.length <= index) usage.push(0);
+  usage[index] += 1;
+  await d.put("cards", { ...card, sentence_usage: usage, updated_at: new Date().toISOString() });
+  await d.put("cardDirty", { id: wordId });
+}
+
 /** Remove this user's card for a word. Shared content is left in the cache. */
 export async function deleteCardLocal(wordId: string): Promise<void> {
   const d = await db();

@@ -31,6 +31,7 @@ create extension if not exists "pgcrypto";  -- gen_random_uuid()
 -- (the words_touch_updated_at trigger drops automatically with public.words below)
 drop function if exists public.claim_sentence_tickets(integer, integer);
 drop function if exists public.complete_sentence_ticket(uuid, jsonb, integer);
+drop function if exists public.hide_sentence(uuid, integer, integer);
 drop function if exists public.increment_mw_lookup(uuid, date);
 drop function if exists public.touch_updated_at();
 
@@ -322,6 +323,46 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
+-- hide_sentence(word_id, index, flag_threshold)
+--
+-- "Change this sentence" (SPEC 1.6): bumps the global hide_count on one sentence
+-- and flags it once `flag_threshold` distinct users have hidden it. Per-user
+-- hiding lives in user_cards.hidden_sentences and syncs the normal way — this
+-- only touches the shared `words` row. `FOR UPDATE` serialises concurrent hides
+-- on the same word. Returns the updated element, or null if the index is out of
+-- range.
+-- ----------------------------------------------------------------------------
+create function public.hide_sentence(p_word_id uuid, p_index integer, p_flag_threshold integer)
+returns jsonb
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  elem jsonb;
+  new_hide integer;
+begin
+  select w.sentences -> p_index into elem
+    from public.words w
+   where w.id = p_word_id
+   for update;
+  if elem is null then
+    return null;
+  end if;
+
+  new_hide := coalesce((elem->>'hide_count')::integer, 0) + 1;
+  elem := jsonb_set(elem, '{hide_count}', to_jsonb(new_hide));
+  if new_hide >= p_flag_threshold then
+    elem := jsonb_set(elem, '{flagged}', 'true'::jsonb);
+  end if;
+
+  update public.words
+     set sentences = jsonb_set(sentences, array[p_index::text], elem)
+   where id = p_word_id;
+  return elem;
+end;
+$$;
+
+-- ----------------------------------------------------------------------------
 -- increment_mw_lookup(user_id, day)
 --
 -- Atomically bumps this user's Merriam-Webster lookup counter for `day` and
@@ -347,11 +388,13 @@ $$;
 
 -- These functions run from the backend with the service-role key. Keep them
 -- off the client roles.
-revoke execute on function public.claim_sentence_tickets(integer, integer)      from public, anon, authenticated;
+revoke execute on function public.claim_sentence_tickets(integer, integer)       from public, anon, authenticated;
 revoke execute on function public.complete_sentence_ticket(uuid, jsonb, integer) from public, anon, authenticated;
-revoke execute on function public.increment_mw_lookup(uuid, date)               from public, anon, authenticated;
-grant  execute on function public.claim_sentence_tickets(integer, integer)      to service_role;
+revoke execute on function public.hide_sentence(uuid, integer, integer)          from public, anon, authenticated;
+revoke execute on function public.increment_mw_lookup(uuid, date)                from public, anon, authenticated;
+grant  execute on function public.claim_sentence_tickets(integer, integer)       to service_role;
 grant  execute on function public.complete_sentence_ticket(uuid, jsonb, integer) to service_role;
-grant  execute on function public.increment_mw_lookup(uuid, date)               to service_role;
+grant  execute on function public.hide_sentence(uuid, integer, integer)          to service_role;
+grant  execute on function public.increment_mw_lookup(uuid, date)                to service_role;
 
 commit;
