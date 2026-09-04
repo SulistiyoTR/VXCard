@@ -9,7 +9,6 @@ export interface StatsOverview {
   finished: number;
   levels: Record<number, number>;
   accuracy: { correct: number; slow: number; wrong: number } | null;
-  refreshReady: number;
 }
 
 export function activeDays(sessions: readonly SessionRow[]): string[] {
@@ -24,10 +23,8 @@ export function statsOverview(
 ): StatsOverview {
   const days = activeDays(sessions);
   const levels: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  let refreshReady = 0;
   for (const w of deck) {
     levels[w.level] = (levels[w.level] ?? 0) + 1;
-    if (w.sentences.some((s) => s.used_count >= 3)) refreshReady += 1;
   }
 
   const cutoff = addDays(now, -30);
@@ -53,7 +50,6 @@ export function statsOverview(
     finished: levels[5] ?? 0,
     levels,
     accuracy,
-    refreshReady,
   };
 }
 

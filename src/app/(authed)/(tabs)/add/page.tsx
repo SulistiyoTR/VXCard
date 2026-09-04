@@ -12,7 +12,6 @@ function packageToWord(pkg: GeneratedPackage): Word {
   const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
-    user_id: "",
     word: pkg.word,
     created_at: now,
     updated_at: now,
@@ -25,12 +24,16 @@ function packageToWord(pkg: GeneratedPackage): Word {
     sentences: pkg.sentences,
     distractor_defs: pkg.distractor_defs,
     distractor_words: pkg.distractor_words,
+    status: "complete",
+    pool_full: false,
     level: 1,
     streak: 0,
     due_date: addDays(today(), 1),
     lapse_count: 0,
     review_count: 0,
     last_seen_date: null,
+    sentence_usage: [],
+    hidden_sentences: [],
   };
 }
 

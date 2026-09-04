@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { CONFIG } from "@/lib/config";
 import { statsOverview } from "@/lib/statsCalc";
 import { useAppData } from "@/lib/store/provider";
 import { EnableReminders } from "@/components/EnableReminders";
 import { PageTitle, Screen } from "@/components/ui";
-import { RefreshSentencesButton } from "./RefreshSentencesButton";
 import { SignOutButton } from "./SignOutButton";
 
 const LEVEL_ROWS: { key: number; label: string }[] = [
@@ -21,10 +19,6 @@ export default function StatsPage() {
   const { deck, sessions, reviews, online } = useAppData();
   const s = statsOverview(deck, sessions, reviews);
   const maxLevel = Math.max(1, ...Object.values(s.levels));
-
-  const staleSubjects = deck
-    .filter((w) => w.sentences.some((x) => x.used_count >= CONFIG.REFRESH_THRESHOLD))
-    .map((w) => ({ id: w.id, word: w.word, pos: w.pos, definition: w.definition }));
 
   return (
     <Screen className="px-5 pb-6">
@@ -76,13 +70,6 @@ export default function StatsPage() {
         </div>
       ) : (
         <p className="mt-2 text-sm text-text-faint">No reviews yet.</p>
-      )}
-
-      {staleSubjects.length > 0 && (
-        <>
-          <Divider />
-          <RefreshSentencesButton subjects={staleSubjects} disabled={!online} />
-        </>
       )}
 
       <Divider />

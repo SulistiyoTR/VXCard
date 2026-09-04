@@ -1,15 +1,25 @@
 "use client";
 
-import type { Review, SessionRow, Word } from "@/lib/types";
+import type { Review, SessionRow, UserCard, Word, WordContent } from "@/lib/types";
 import { db, metaGet, metaSet } from "./idb";
-import { mergeWord } from "./merge";
-import { clearOutbox, putReviews, putServerSessions, readOutbox } from "./local";
+import { mergeCard } from "./merge";
+import {
+  clearOutbox,
+  putReviews,
+  putServerCards,
+  putServerContent,
+  putServerSessions,
+  readOutbox,
+  splitWord,
+} from "./local";
 
 const EPOCH = "1970-01-01T00:00:00.000Z";
 const REVIEW_WINDOW_DAYS = 35;
 
 interface PullResponse {
-  words: Word[];
+  /** Shared content — server-authoritative, overwritten wholesale. */
+  words: WordContent[];
+  cards: UserCard[];
   sessions: SessionRow[];
   reviews: Review[];
   serverTime: string;
@@ -54,7 +64,7 @@ export async function push(): Promise<void> {
   const outbox = await readOutbox();
   if (
     outbox.reviews.length === 0 &&
-    outbox.words.length === 0 &&
+    outbox.cards.length === 0 &&
     outbox.sessions.length === 0 &&
     outbox.deletions.length === 0
   ) {
@@ -70,13 +80,13 @@ export async function push(): Promise<void> {
 
   await clearOutbox({
     reviewIds: outbox.reviews.map((r) => r.id!).filter(Boolean),
-    wordIds: outbox.words.map((w) => w.id),
+    cardWordIds: outbox.cards.map((c) => c.word_id),
     sessionIds: outbox.sessions.map((s) => s.id),
     deletions: outbox.deletions,
   });
 }
 
-/** Pull remote changes since the last sync and merge them (LWW). Returns whether anything changed. */
+/** Pull remote changes since the last sync and merge them. Returns whether anything changed. */
 export async function pull(): Promise<boolean> {
   const since = (await metaGet<string>("lastSync")) ?? EPOCH;
   const res = await fetch(`/api/sync?since=${encodeURIComponent(since)}`);
@@ -86,19 +96,26 @@ export async function pull(): Promise<boolean> {
   let changed = false;
   const d = await db();
 
+  // Shared content — no conflicts, just refresh the cache.
   if (data.words.length) {
-    const tx = d.transaction(["words", "wordDirty"], "readwrite");
-    for (const remote of data.words) {
+    await putServerContent(data.words);
+    changed = true;
+  }
+
+  // Per-user cards — last-write-wins against local + pending edits.
+  if (data.cards.length) {
+    const tx = d.transaction(["cards", "cardDirty"], "readwrite");
+    for (const remote of data.cards) {
       const [local, dirty] = await Promise.all([
-        tx.objectStore("words").get(remote.id),
-        tx.objectStore("wordDirty").get(remote.id),
+        tx.objectStore("cards").get(remote.word_id),
+        tx.objectStore("cardDirty").get(remote.word_id),
       ]);
-      const decision = mergeWord(local, remote, Boolean(dirty));
+      const decision = mergeCard(local, remote, Boolean(dirty));
       if (decision.take) {
-        await tx.objectStore("words").put(remote);
+        await tx.objectStore("cards").put(remote);
         changed = true;
       }
-      if (decision.dropDirty) await tx.objectStore("wordDirty").delete(remote.id);
+      if (decision.dropDirty) await tx.objectStore("cardDirty").delete(remote.word_id);
     }
     await tx.done;
   }
@@ -125,14 +142,15 @@ export async function seedFromServer(): Promise<void> {
 }
 
 /** Fallback seed when the first launch is offline but SSR gave us data. */
-export async function seedFromSnapshot(words: Word[], sessions: SessionRow[]): Promise<void> {
-  const d = await db();
-  const tx = d.transaction(["words", "sessions"], "readwrite");
-  await Promise.all([
-    ...words.map((w) => tx.objectStore("words").put(w)),
-    ...sessions.map((s) => tx.objectStore("sessions").put(s)),
-  ]);
-  await tx.done;
+export async function seedFromSnapshot(deck: Word[], sessions: SessionRow[]): Promise<void> {
+  const content: WordContent[] = [];
+  const cards: UserCard[] = [];
+  for (const w of deck) {
+    const parts = splitWord(w);
+    content.push(parts.content);
+    cards.push(parts.card);
+  }
+  await Promise.all([putServerContent(content), putServerCards(cards), putServerSessions(sessions)]);
   await metaSet("seeded", true);
   // leave lastSync at epoch so the next online sync reconciles fully
 }

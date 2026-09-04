@@ -1,13 +1,31 @@
 "use client";
 
 import { db } from "./idb";
-import type { Review, SessionRow, Word } from "@/lib/types";
+import { joinWord, splitWord } from "./shape";
+import {
+  CARD_FIELDS,
+  type Review,
+  type SessionRow,
+  type UserCard,
+  type Word,
+  type WordContent,
+} from "@/lib/types";
+
+export { joinWord, splitWord } from "./shape";
 
 /* ------------------------------------------------------------------ reads */
 
 export async function loadDeck(): Promise<Word[]> {
-  const all = await (await db()).getAll("words");
-  return all.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const d = await db();
+  const [cards, contents] = await Promise.all([d.getAll("cards"), d.getAll("words")]);
+  const byId = new Map(contents.map((c) => [c.id, c]));
+  return cards
+    .map((card) => {
+      const content = byId.get(card.word_id);
+      return content ? joinWord(content, card) : null;
+    })
+    .filter((w): w is Word => w !== null)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
 
 export async function loadSessions(): Promise<SessionRow[]> {
@@ -32,15 +50,28 @@ export async function putReviews(reviews: Review[], keepSince: string): Promise<
 }
 
 export async function getWordLocal(id: string): Promise<Word | undefined> {
-  return (await db()).get("words", id);
+  const d = await db();
+  const [card, content] = await Promise.all([d.get("cards", id), d.get("words", id)]);
+  return card && content ? joinWord(content, card) : undefined;
 }
 
-/* --------------------------------------------------------- writes (merge) */
+export async function getCardLocal(wordId: string): Promise<UserCard | undefined> {
+  return (await db()).get("cards", wordId);
+}
 
-/** Bulk write from a server pull — does NOT mark the rows dirty. */
-export async function putServerWords(words: Word[]): Promise<void> {
+/* --------------------------------------------------------- writes (cache) */
+
+/** Bulk write shared content from a server pull — never marked dirty. */
+export async function putServerContent(items: WordContent[]): Promise<void> {
   const tx = (await db()).transaction("words", "readwrite");
-  await Promise.all(words.map((w) => tx.store.put(w)));
+  await Promise.all(items.map((c) => tx.store.put(c)));
+  await tx.done;
+}
+
+/** Bulk write cards from the first-run seed — not marked dirty. */
+export async function putServerCards(cards: UserCard[]): Promise<void> {
+  const tx = (await db()).transaction("cards", "readwrite");
+  await Promise.all(cards.map((c) => tx.store.put(c)));
   await tx.done;
 }
 
@@ -50,34 +81,51 @@ export async function putServerSessions(sessions: SessionRow[]): Promise<void> {
   await tx.done;
 }
 
-export async function deleteWordLocalOnly(id: string): Promise<void> {
-  await (await db()).delete("words", id);
-}
-
 /* ------------------------------------------------------ writes (local op) */
 
-export async function addWordLocal(word: Word): Promise<void> {
+/** Add flow: cache the shared content and create a dirty card pointing at it. */
+export async function addCardLocal(word: Word): Promise<void> {
+  const { content, card } = splitWord(word);
   const d = await db();
-  await d.put("words", word);
-  await d.put("wordDirty", { id: word.id });
+  const tx = d.transaction(["words", "cards", "cardDirty"], "readwrite");
+  await Promise.all([
+    tx.objectStore("words").put(content),
+    tx.objectStore("cards").put(card),
+    tx.objectStore("cardDirty").put({ id: card.word_id }),
+  ]);
+  await tx.done;
 }
 
-/** Apply a scheduling/sentence patch, stamp updated_at, mark dirty. */
-export async function patchWordLocal(id: string, patch: Partial<Word>): Promise<Word | undefined> {
+/** Apply a card patch (scheduling / usage), stamp updated_at, mark dirty. */
+export async function patchCardLocal(
+  wordId: string,
+  patch: Partial<Word>,
+): Promise<Word | undefined> {
   const d = await db();
-  const current = await d.get("words", id);
+  const current = await d.get("cards", wordId);
   if (!current) return undefined;
-  const next: Word = { ...current, ...patch, updated_at: new Date().toISOString() };
-  await d.put("words", next);
-  await d.put("wordDirty", { id });
-  return next;
+
+  const cardPatch: Partial<UserCard> = {};
+  for (const key of CARD_FIELDS) {
+    if (key in patch) (cardPatch as Record<string, unknown>)[key] = patch[key];
+  }
+
+  const next: UserCard = { ...current, ...cardPatch, updated_at: new Date().toISOString() };
+  await d.put("cards", next);
+  await d.put("cardDirty", { id: wordId });
+  return getWordLocal(wordId);
 }
 
-export async function deleteWordLocal(id: string): Promise<void> {
+/** Remove this user's card for a word. Shared content is left in the cache. */
+export async function deleteCardLocal(wordId: string): Promise<void> {
   const d = await db();
-  await d.delete("words", id);
-  await d.delete("wordDirty", id);
-  await d.put("wordTombstone", { id });
+  const tx = d.transaction(["cards", "cardDirty", "cardTombstone"], "readwrite");
+  await Promise.all([
+    tx.objectStore("cards").delete(wordId),
+    tx.objectStore("cardDirty").delete(wordId),
+    tx.objectStore("cardTombstone").put({ id: wordId }),
+  ]);
+  await tx.done;
 }
 
 export async function enqueueReview(review: Review): Promise<void> {
@@ -96,45 +144,46 @@ export async function upsertSessionLocal(session: SessionRow): Promise<void> {
 
 export interface Outbox {
   reviews: Review[];
-  words: Word[];
+  cards: UserCard[];
   sessions: SessionRow[];
+  /** `word_id`s of removed cards. */
   deletions: string[];
 }
 
 export async function readOutbox(): Promise<Outbox> {
   const d = await db();
-  const [reviews, dirtyWordIds, dirtySessionIds, tombstones] = await Promise.all([
+  const [reviews, dirtyCardIds, dirtySessionIds, tombstones] = await Promise.all([
     d.getAll("reviewOutbox"),
-    d.getAllKeys("wordDirty"),
+    d.getAllKeys("cardDirty"),
     d.getAllKeys("sessionDirty"),
-    d.getAllKeys("wordTombstone"),
+    d.getAllKeys("cardTombstone"),
   ]);
-  const words = (await Promise.all(dirtyWordIds.map((id) => d.get("words", id)))).filter(
-    (w): w is Word => Boolean(w),
+  const cards = (await Promise.all(dirtyCardIds.map((id) => d.get("cards", id)))).filter(
+    (c): c is UserCard => Boolean(c),
   );
   const sessions = (await Promise.all(dirtySessionIds.map((id) => d.get("sessions", id)))).filter(
     (s): s is SessionRow => Boolean(s),
   );
-  return { reviews, words, sessions, deletions: tombstones as string[] };
+  return { reviews, cards, sessions, deletions: tombstones as string[] };
 }
 
 /** Clear exactly the entries that were successfully pushed (not a blind clear). */
 export async function clearOutbox(sent: {
   reviewIds: string[];
-  wordIds: string[];
+  cardWordIds: string[];
   sessionIds: string[];
   deletions: string[];
 }): Promise<void> {
   const d = await db();
   const tx = d.transaction(
-    ["reviewOutbox", "wordDirty", "sessionDirty", "wordTombstone"],
+    ["reviewOutbox", "cardDirty", "sessionDirty", "cardTombstone"],
     "readwrite",
   );
   await Promise.all([
     ...sent.reviewIds.map((id) => tx.objectStore("reviewOutbox").delete(id)),
-    ...sent.wordIds.map((id) => tx.objectStore("wordDirty").delete(id)),
+    ...sent.cardWordIds.map((id) => tx.objectStore("cardDirty").delete(id)),
     ...sent.sessionIds.map((id) => tx.objectStore("sessionDirty").delete(id)),
-    ...sent.deletions.map((id) => tx.objectStore("wordTombstone").delete(id)),
+    ...sent.deletions.map((id) => tx.objectStore("cardTombstone").delete(id)),
   ]);
   await tx.done;
 }

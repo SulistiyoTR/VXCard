@@ -31,7 +31,14 @@ describe("buildQuestion", () => {
   it("level 3: blanks the target in the sentence and offers 4 options", () => {
     const w = makeWord({
       word: "relegate",
-      sentences: [{ text: "They relegated the team after a poor season here.", form: "relegated", used_count: 0 }],
+      sentences: [
+        {
+          text: "They relegated the team after a poor season here.",
+          form: "relegated",
+          hide_count: 0,
+          flagged: false,
+        },
+      ],
     });
     const q = buildQuestion(w, 3, [], seededRng(1));
     expect(q.sentence).toContain("______");
@@ -47,13 +54,26 @@ describe("buildQuestion", () => {
 });
 
 describe("pickSentence (SPEC 1.6 rotation)", () => {
-  it("returns the least-used sentence", () => {
-    const sentences = [
-      { text: "a", form: "x", used_count: 3 },
-      { text: "b", form: "x", used_count: 1 },
-      { text: "c", form: "x", used_count: 5 },
-    ];
-    expect(pickSentence(sentences, seededRng(1))?.index).toBe(1);
+  const s = (text: string, flagged = false) => ({ text, form: "x", hide_count: 0, flagged });
+
+  it("returns the least-used sentence for this user", () => {
+    const sentences = [s("a"), s("b"), s("c")];
+    expect(pickSentence(sentences, [3, 1, 5], [], seededRng(1))?.index).toBe(1);
+  });
+
+  it("skips flagged and hidden sentences", () => {
+    const sentences = [s("a"), s("b", true), s("c")];
+    const got = pickSentence(sentences, [0, 0, 0], [0], seededRng(1));
+    expect(got?.index).toBe(2);
+  });
+
+  it("treats a short usage array as zeros", () => {
+    const sentences = [s("a"), s("b"), s("c")];
+    expect(pickSentence(sentences, [], [], seededRng(1))).not.toBeNull();
+  });
+
+  it("returns null with no sentences", () => {
+    expect(pickSentence([], [], [], seededRng(1))).toBeNull();
   });
 });
 

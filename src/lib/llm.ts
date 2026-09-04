@@ -83,7 +83,8 @@ export async function generateSentences(input: {
   return parsed.sentences.slice(0, CONFIG.SENTENCES_PER_WORD).map((s) => ({
     text: s.text.trim(),
     form: (s.form || input.word).trim(),
-    used_count: 0,
+    hide_count: 0,
+    flagged: false,
   }));
 }
 
